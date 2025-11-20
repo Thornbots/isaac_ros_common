@@ -1,0 +1,9 @@
+#truncated and simplified version of Dockerfile.realsense for rplidar hotplug only
+
+ARG BASE_IMAGE=ubuntu:22.04
+FROM $BASE_IMAGE
+
+# Copy hotplug script for udev rules/hotplug for RealSense
+RUN mkdir -p /opt/rplidar/
+COPY scripts/hotplug-rplidar.sh /opt/rplidar/hotplug-rplidar.sh
+COPY udev_rules/98-rplidar.rules /etc/udev/rules.d/98-rplidar.rules
