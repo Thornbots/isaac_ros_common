@@ -7,3 +7,10 @@ FROM $BASE_IMAGE
 RUN mkdir -p /opt/rplidar/
 COPY scripts/hotplug-rplidar.sh /opt/rplidar/hotplug-rplidar.sh
 COPY udev_rules/98-rplidar.rules /etc/udev/rules.d/98-rplidar.rules
+
+
+
+RUN apt update 
+
+# Modify realsense mono config to increase frame rate to 60fps
+#RUN sudo sed -i 's/640x480x15/640x480x60/' /opt/ros/humble/share/isaac_ros_realsense/config/realsense_mono.yaml
