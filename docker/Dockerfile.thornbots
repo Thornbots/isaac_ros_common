@@ -15,4 +15,5 @@ RUN sudo apt-get install -y ros-humble-isaac-ros-yolov8 ros-humble-isaac-ros-dnn
 RUN sudo apt-get install -y ros-humble-isaac-ros-examples ros-humble-isaac-ros-realsense
 # Modify realsense mono config to increase frame rate to 60fps
 COPY config/realsense_mono_depth_60fps.yaml /opt/ros/humble/share/isaac_ros_realsense/config/realsense_mono_depth.yaml
+COPY config/realsense_mono_60fps.yaml /opt/ros/humble/share/isaac_ros_realsense/config/realsense_mono.yaml
 
