@@ -3,7 +3,6 @@ FROM ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
 
-ARG DEBIAN_FRONTEND=noninteractive
 ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
 
 # -----------------------------
@@ -49,7 +48,7 @@ RUN git clone -b trt10-aphid https://github.com/BrooklynLJ/ROS2-Yolo26-TensorRT.
 # -----------------------------
 # Build workspace (critical ordering)
 # -----------------------------
-WORKDIR /workspaces/ros2_ws
+WORKDIR /workspaces/ros2_ws/
 
 RUN source /opt/ros/humble/setup.bash && \
     colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
@@ -57,7 +56,7 @@ RUN source /opt/ros/humble/setup.bash && \
 # -----------------------------
 # Environment setup
 # -----------------------------
-RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
-    echo "source /workspaces/ros2_ws/install/setup.bash" >> /root/.bashrc
+RUN echo "source /opt/ros/humble/setup.bash" >> /etc/bash.bashrc && \
+    echo "source /workspaces/ros2_ws/install/setup.bash" >> /etc/bash.bashrc
 
 CMD ["/bin/bash"]
