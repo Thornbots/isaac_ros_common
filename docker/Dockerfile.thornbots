@@ -41,6 +41,7 @@ COPY config/realsense_mono_60fps.yaml \
 # -----------------------------
 WORKDIR /workspaces/ros2_ws/src
 
+RUN ls
 # Clone dependencies
 RUN git clone ${SLLIDAR_GIT_URL}
 
