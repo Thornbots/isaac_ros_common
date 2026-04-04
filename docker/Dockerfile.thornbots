@@ -2,8 +2,8 @@ ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:humble-3.2
 FROM ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
-
 ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
+
 
 # -----------------------------
 # System dependencies
@@ -26,7 +26,6 @@ RUN apt-get update && apt-get install -y \
     ros-humble-isaac-ros-common \
     ros-humble-image-transport-plugins
 
-
 # -----------------------------
 # Patch Realsense configs
 # -----------------------------
@@ -40,18 +39,34 @@ COPY config/realsense_mono_60fps.yaml \
 # Create ROS workspace
 # -----------------------------
 WORKDIR /workspaces/ros2_ws/src
-# Clone dependencies
-RUN git clone ${SLLIDAR_GIT_URL}
 
-#  YOLO26 TensorRT repo (important part)
+
+# Clone dependencies
+#  YOLO26 TensorRT 
+ARG RECLONE_YOLO=1
 RUN git clone -b trt10-aphid https://github.com/BrooklynLJ/ROS2-Yolo26-TensorRT.git
 
-# -----------------------------
-# Build workspace (critical ordering)
-# -----------------------------
+#Lidar package
+ARG RECLONE_SLLIDAR=1
+RUN git clone ${SLLIDAR_GIT_URL}
 
+#Serial package
+ARG RECLONE_SERIAL=1
+RUN git clone -b dji_implimentation https://github.com/BrooklynLJ/ros2_dji_serial.git
+#RUN git clone https://github.com/BrooklynLJ/ros2_dji_serial.git
+
+# -----------------------------
+# Build workspace 
+# -----------------------------
+WORKDIR /workspaces/ros2_ws/
+
+# Restrict the underlying 'make' to only use 2 CPU threads at a time, otherwise can freak out 
+# and use all system resources
+ENV MAKEFLAGS="-j2"
 RUN source /opt/ros/humble/setup.bash && \
-    colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+    colcon build --symlink-install \   
+        --parallel-workers 3 \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release 
 
 # -----------------------------
 # Environment setup
@@ -59,6 +74,9 @@ RUN source /opt/ros/humble/setup.bash && \
 RUN echo "source /opt/ros/humble/setup.bash" >> /etc/bash.bashrc && \
     echo "source /workspaces/ros2_ws/install/setup.bash" >> /etc/bash.bashrc
 
+# -----------------------------
+# Environment setup to add udev rules
+# -----------------------------
 WORKDIR /workspaces/ros2_ws/src/sllidar_ros2
 
 RUN source scripts/create_udev_rules.sh
