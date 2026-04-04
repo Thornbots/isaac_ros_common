@@ -44,7 +44,7 @@ WORKDIR /workspaces/ros2_ws/src
 # Clone dependencies
 #  YOLO26 TensorRT 
 ARG RECLONE_YOLO=1
-RUN git clone -b trt10-aphid https://github.com/BrooklynLJ/ROS2-Yolo26-TensorRT.git
+RUN git clone -b jetson-buildfix https://github.com/BrooklynLJ/ROS2-Yolo26-TensorRT.git
 
 #Lidar package
 ARG RECLONE_SLLIDAR=1
