@@ -66,7 +66,7 @@ WORKDIR /workspaces/ros2_ws/
 
 # Restrict the underlying 'make' to only use 2 CPU threads at a time, otherwise can freak out 
 # and use all system resources
-ENV MAKEFLAGS="-j2"
+ENV MAKEFLAGS="-j4"
 RUN source /opt/ros/humble/setup.bash && \
     colcon build --symlink-install \   
         --parallel-workers 3 \
