@@ -1,88 +1,170 @@
+##############################################################################
+# Dockerfile.thornbots
+#
+# Each git-cloned package gets its OWN layer: clone → build → install.
+# Changing one package (or bumping its RECLONE_* ARG) only invalidates that
+# layer and everything after it — all earlier packages stay cached.
+#
+# Layer order (slowest/most-stable first → fastest/most-volatile last):
+#   1  base + system deps          (almost never changes)
+#   2  Isaac ROS apt packages      (changes on ROS release day only)
+#   3  realsense configs patch     (changes rarely)
+#   4  sllidar_ros2                (lidar driver, stable)
+#   5  ros2_dji_serial             (serial/DJI driver, occasional)
+#   6  ROS2-Yolo26-TensorRT        (inference glue, occasional)
+#   7  Realsense_ROI_Depth_Rect.   (depth utils, occasional)
+#   8  realsense-yolov8-nitros-bridge  (our package, actively developed)
+#   9  udev rules + entrypoint     (depends on sllidar being installed)
+#
+# Usage
+# -----
+#   docker build -f Dockerfile.thornbots -t thornbots:latest .
+#
+#   # Force re-clone + rebuild of a single package without touching others:
+#   docker build --build-arg RECLONE_BRIDGE=2 -f Dockerfile.thornbots -t thornbots:latest .
+##############################################################################
+
 ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:humble-3.2
 FROM ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
+
+# ─── Git URL overrides (useful for forks / private mirrors) ───────────────
 ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
 
+# ─── Shared colcon flags ──────────────────────────────────────────────────
+# Limit parallelism so the Jetson/build host doesn't OOM during heavy builds.
+ENV MAKEFLAGS="-j4"
 
-# -----------------------------
-# System dependencies
-# -----------------------------
-RUN apt-get update && apt-get install -y \
+# Colcon options reused in every build step below.
+# --symlink-install lets us mount sources for live editing if needed.
+# We skip testing to keep the layer thin.
+ENV COLCON_OPTS="--symlink-install \
+                 --parallel-workers 3 \
+                 --cmake-args -DCMAKE_BUILD_TYPE=Release \
+                 --event-handlers console_direct+"
+
+# Workspace root — all packages install into the same prefix so that later
+# packages can find earlier ones via source /workspaces/ros2_ws/install/setup.bash
+ENV ROS_WS=/workspaces/ros2_ws
+ENV ROS_SETUP=/opt/ros/humble/setup.bash
+
+##############################################################################
+# LAYER 1 — System build tools
+# Invalidated only when the list of apt packages changes.
+##############################################################################
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     build-essential \
     python3-colcon-common-extensions \
-    python3-pip 
+    python3-pip \
+ && rm -rf /var/lib/apt/lists/*
 
-# -----------------------------
-# Isaac ROS packages
-# -----------------------------
-RUN apt-get update && apt-get install -y \
+##############################################################################
+# LAYER 2 — Isaac ROS binary packages
+# These are large; keeping them in their own layer avoids re-downloading on
+# every source-code change.
+##############################################################################
+# this is copied from another section to avoid a docker build error
+RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list && \
+    apt-get update && apt-get install -y yarn && \
+    corepack enable
+
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-isaac-ros-yolov8 \
     ros-humble-isaac-ros-dnn-image-encoder \
     ros-humble-isaac-ros-tensor-rt \
     ros-humble-isaac-ros-examples \
     ros-humble-isaac-ros-realsense \
     ros-humble-isaac-ros-common \
-    ros-humble-image-transport-plugins
+    ros-humble-image-transport-plugins \
+ && rm -rf /var/lib/apt/lists/*
 
-# -----------------------------
-# Patch Realsense configs
-# -----------------------------
+##############################################################################
+# LAYER 3 — RealSense config patches
+# Small COPY; only invalidated when the yaml files change.
+##############################################################################
 COPY config/realsense_mono_depth_60fps.yaml \
     /opt/ros/humble/share/isaac_ros_realsense/config/realsense_mono_depth.yaml
 
 COPY config/realsense_mono_60fps.yaml \
     /opt/ros/humble/share/isaac_ros_realsense/config/realsense_mono.yaml
 
-# -----------------------------
-# Create ROS workspace
-# -----------------------------
-WORKDIR /workspaces/ros2_ws/src
-
-
-# Clone dependencies
-#  YOLO26 TensorRT 
-ARG RECLONE_YOLO=1
-RUN git clone -b jetson-buildfix https://github.com/BrooklynLJ/ROS2-Yolo26-TensorRT.git
-
-#Lidar package
+##############################################################################
+# LAYER 4 — sllidar_ros2 (LiDAR driver)
+#
+# Bump RECLONE_SLLIDAR to force a fresh clone+build without touching layers 5+.
+# Because we source the workspace install at the start of each build step,
+# later packages can depend on earlier ones being installed.
+##############################################################################
 ARG RECLONE_SLLIDAR=1
-RUN git clone ${SLLIDAR_GIT_URL}
+RUN mkdir -p ${ROS_WS}/src && \
+    cd ${ROS_WS}/src && \
+    git clone ${SLLIDAR_GIT_URL} && \
+    cd ${ROS_WS} && \
+    source ${ROS_SETUP} && \
+    colcon build ${COLCON_OPTS} --packages-select sllidar_ros2
 
-#Serial package
+##############################################################################
+# LAYER 5 — ros2_dji_serial (DJI serial bridge)
+##############################################################################
 ARG RECLONE_SERIAL=1
-RUN git clone -b dji_implimentation https://github.com/BrooklynLJ/ros2_dji_serial.git
-#RUN git clone https://github.com/BrooklynLJ/ros2_dji_serial.git
+RUN cd ${ROS_WS}/src && \
+    git clone -b dji_implimentation https://github.com/BrooklynLJ/ros2_dji_serial.git && \
+    cd ${ROS_WS} && \
+    source ${ROS_SETUP} && \
+    source ${ROS_WS}/install/setup.bash && \
+    colcon build ${COLCON_OPTS} --packages-select ros2_dji_serial
 
-#Depth computation package
+##############################################################################
+# LAYER 6 — ROS2-Yolo26-TensorRT (inference wrapper)
+##############################################################################
+ARG RECLONE_YOLO=1
+RUN cd ${ROS_WS}/src && \
+    git clone -b jetson-buildfix https://github.com/BrooklynLJ/ROS2-Yolo26-TensorRT.git && \
+    cd ${ROS_WS} && \
+    source ${ROS_SETUP} && \
+    source ${ROS_WS}/install/setup.bash && \
+    colcon build ${COLCON_OPTS} --packages-select ros2_yolo26_tensorrt
+
+##############################################################################
+# LAYER 7 — Realsense_ROI_Depth_Rectifier (depth utility)
+##############################################################################
 ARG RECLONE_DEPTH=2
-RUN git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git
+RUN cd ${ROS_WS}/src && \
+    git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
+    cd ${ROS_WS} && \
+    source ${ROS_SETUP} && \
+    source ${ROS_WS}/install/setup.bash && \
+    colcon build ${COLCON_OPTS} --packages-select roi_depth_query
 
-# -----------------------------
-# Build workspace 
-# -----------------------------
-WORKDIR /workspaces/ros2_ws/
+##############################################################################
+# LAYER 8 — realsense-yolov8-nitros-bridge (our actively-developed package)
+#
+# This is last because it changes most often; bumping RECLONE_BRIDGE only
+# invalidates this layer and layer 9 below.
+##############################################################################
+ARG RECLONE_BRIDGE=1
+RUN cd ${ROS_WS}/src && \
+    git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
+    cd ${ROS_WS} && \
+    source ${ROS_SETUP} && \
+    source ${ROS_WS}/install/setup.bash && \
+    colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge
 
-# Restrict the underlying 'make' to only use 2 CPU threads at a time, otherwise can freak out 
-# and use all system resources
-ENV MAKEFLAGS="-j4"
-RUN source /opt/ros/humble/setup.bash && \
-    colcon build --symlink-install \   
-        --parallel-workers 3 \
-        --cmake-args -DCMAKE_BUILD_TYPE=Release 
+##############################################################################
+# LAYER 9 — Environment + udev rules
+#
+# Must come after sllidar (layer 4) because it sources its script.
+# Stays cached unless any earlier layer was invalidated.
+##############################################################################
+RUN echo "source ${ROS_SETUP}" >> /etc/bash.bashrc && \
+    echo "source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
 
-# -----------------------------
-# Environment setup
-# -----------------------------
-RUN echo "source /opt/ros/humble/setup.bash" >> /etc/bash.bashrc && \
-    echo "source /workspaces/ros2_ws/install/setup.bash" >> /etc/bash.bashrc
+# sllidar udev rules — run from its source tree which was cloned in layer 4
+RUN source ${ROS_WS}/src/sllidar_ros2/scripts/create_udev_rules.sh
 
-# -----------------------------
-# Environment setup to add udev rules
-# -----------------------------
-WORKDIR /workspaces/ros2_ws/src/sllidar_ros2
-
-RUN source scripts/create_udev_rules.sh
-
+WORKDIR ${ROS_WS}
 CMD ["/bin/bash"]
