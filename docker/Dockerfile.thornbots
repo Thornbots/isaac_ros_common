@@ -56,7 +56,7 @@ RUN git clone -b dji_implimentation https://github.com/BrooklynLJ/ros2_dji_seria
 #RUN git clone https://github.com/BrooklynLJ/ros2_dji_serial.git
 
 #Depth computation package
-ARG RECLONE_DEPTH=1
+ARG RECLONE_DEPTH=2
 RUN git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git
 
 # -----------------------------
