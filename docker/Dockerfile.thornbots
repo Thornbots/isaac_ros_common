@@ -105,7 +105,7 @@ RUN mkdir -p ${ROS_WS}/src && \
     git clone ${SLLIDAR_GIT_URL} && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
-    colcon build ${COLCON_OPTS} --packages-select sllidar_ros2
+    colcon build ${COLCON_OPTS} --packages-select sllidar_ros2 --parallel-workers 3
 
 ##############################################################################
 # LAYER 5 — ros2_dji_serial (DJI serial bridge)
@@ -116,7 +116,7 @@ RUN cd ${ROS_WS}/src && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select ros2_dji_serial
+    colcon build ${COLCON_OPTS} --packages-select ros2_dji_serial --parallel-workers 3
 
 ##############################################################################
 # LAYER 6 — ROS2-Yolo26-TensorRT (inference wrapper)
@@ -127,7 +127,7 @@ RUN cd ${ROS_WS}/src && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select ros2_yolo26_tensorrt
+    colcon build ${COLCON_OPTS} --packages-select ros2_yolo26_tensorrt --parallel-workers 3
 
 ##############################################################################
 # LAYER 7 — Realsense_ROI_Depth_Rectifier (depth utility)
@@ -138,7 +138,7 @@ RUN cd ${ROS_WS}/src && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select roi_depth_query
+    colcon build ${COLCON_OPTS} --packages-select roi_depth_query --parallel-workers 3
 
 ##############################################################################
 # LAYER 8 — realsense-yolov8-nitros-bridge (our actively-developed package)
@@ -146,13 +146,13 @@ RUN cd ${ROS_WS}/src && \
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
 # invalidates this layer and layer 9 below.
 ##############################################################################
-ARG RECLONE_BRIDGE=2
+ARG RECLONE_BRIDGE=20
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge
+    colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge --parallel-workers 3
 
 ##############################################################################
 # LAYER 9 — Environment + udev rules
