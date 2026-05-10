@@ -132,7 +132,7 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 7 — Realsense_ROI_Depth_Rectifier (depth utility)
 ##############################################################################
-ARG RECLONE_DEPTH=2
+ARG RECLONE_DEPTH=7
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
     cd ${ROS_WS} && \
@@ -146,7 +146,7 @@ RUN cd ${ROS_WS}/src && \
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
 # invalidates this layer and layer 9 below.
 ##############################################################################
-ARG RECLONE_BRIDGE=20
+ARG RECLONE_BRIDGE=29
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
     cd ${ROS_WS} && \
