@@ -112,27 +112,17 @@ RUN mkdir -p ${ROS_WS}/src && \
 ##############################################################################
 ARG RECLONE_SERIAL=1
 RUN cd ${ROS_WS}/src && \
-    git clone -b dji_implimentation https://github.com/BrooklynLJ/ros2_dji_serial.git && \
+    git clone https://github.com/Thornbots/ros2_dji_serial_bridge.git && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
     colcon build ${COLCON_OPTS} --packages-select ros2_dji_serial --parallel-workers 3
 
-##############################################################################
-# LAYER 6 — ROS2-Yolo26-TensorRT (inference wrapper)
-##############################################################################
-ARG RECLONE_YOLO=1
-RUN cd ${ROS_WS}/src && \
-    git clone -b jetson-buildfix https://github.com/BrooklynLJ/ROS2-Yolo26-TensorRT.git && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select ros2_yolo26_tensorrt --parallel-workers 3
 
 ##############################################################################
-# LAYER 7 — Realsense_ROI_Depth_Rectifier (depth utility)
+# LAYER 6 — Realsense_ROI_Depth_Rectifier (depth utility)
 ##############################################################################
-ARG RECLONE_DEPTH=7
+ARG RECLONE_DEPTH=8
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
     cd ${ROS_WS} && \
@@ -141,7 +131,7 @@ RUN cd ${ROS_WS}/src && \
     colcon build ${COLCON_OPTS} --packages-select roi_depth_query --parallel-workers 3
 
 ##############################################################################
-# LAYER 8 — realsense-yolov8-nitros-bridge (our actively-developed package)
+# LAYER 7 — realsense-yolov8-nitros-bridge 
 #
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
 # invalidates this layer and layer 9 below.
@@ -155,7 +145,7 @@ RUN cd ${ROS_WS}/src && \
     colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge --parallel-workers 3
 
 ##############################################################################
-# LAYER 9 — Environment + udev rules
+# LAYER 8 — Environment + udev rules
 #
 # Must come after sllidar (layer 4) because it sources its script.
 # Stays cached unless any earlier layer was invalidated.
