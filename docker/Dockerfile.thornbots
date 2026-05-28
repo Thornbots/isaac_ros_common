@@ -116,7 +116,7 @@ RUN cd ${ROS_WS}/src && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select ros2_dji_serial --parallel-workers 3
+    colcon build ${COLCON_OPTS} --packages-select dji_serial_bridge --parallel-workers 3
 
 
 ##############################################################################
