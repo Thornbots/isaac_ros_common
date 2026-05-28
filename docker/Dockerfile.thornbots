@@ -110,7 +110,7 @@ RUN mkdir -p ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 5 — ros2_dji_serial (DJI serial bridge)
 ##############################################################################
-ARG RECLONE_SERIAL=3
+ARG RECLONE_SERIAL=4
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/ros2_dji_serial_bridge.git && \
     cd ${ROS_WS} && \
