@@ -28,8 +28,10 @@ ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:humble-3.2
 FROM ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
-RUN usermod -a -G dialout admin || true
-# ─── Git URL overrides (useful for forks / private mirrors) ───────────────
+RUN sed -i 's/adduser \${USERNAME} sudo  >\/dev\/null/adduser \${USERNAME} sudo  >\/dev\/null\ngroupadd -f dialout >\/dev\/null\nadduser \${USERNAME} dialout >\/dev\/null/' \
+    /usr/local/bin/scripts/workspace-entrypoint.sh
+
+    # ─── Git URL overrides (useful for forks / private mirrors) ───────────────
 ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
 
 # ─── Shared colcon flags ──────────────────────────────────────────────────
