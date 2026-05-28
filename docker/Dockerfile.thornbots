@@ -28,7 +28,7 @@ ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:humble-3.2
 FROM ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
-
+RUN usermod -a -G dialout admin || true
 # ─── Git URL overrides (useful for forks / private mirrors) ───────────────
 ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
 
