@@ -34,7 +34,9 @@ chmod 0440 /etc/sudoers.d/${USERNAME}
 adduser ${USERNAME} video >/dev/null
 adduser ${USERNAME} plugdev >/dev/null
 adduser ${USERNAME} sudo  >/dev/null
+groupadd -f dialout >/dev/null
 adduser ${USERNAME} dialout >/dev/null
+groups
 
 # If jtop present, give the user access
 if [ -S /run/jtop.sock ]; then
