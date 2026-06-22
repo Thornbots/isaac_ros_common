@@ -31,7 +31,7 @@ SHELL ["/bin/bash", "-c"]
 RUN sed -i 's/adduser \${USERNAME} sudo  >\/dev\/null/adduser \${USERNAME} sudo  >\/dev\/null\ngroupadd -f dialout >\/dev\/null\nadduser \${USERNAME} dialout >\/dev\/null/' \
     /usr/local/bin/scripts/workspace-entrypoint.sh
 
-    # ─── Git URL overrides (useful for forks / private mirrors) ───────────────
+# ─── Git URL overrides (useful for forks / private mirrors) ───────────────
 ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
 
 # ─── Shared colcon flags ──────────────────────────────────────────────────
@@ -42,9 +42,9 @@ ENV MAKEFLAGS="-j6"
 # --symlink-install lets us mount sources for live editing if needed.
 # We skip testing to keep the layer thin.
 ENV COLCON_OPTS="--symlink-install \
-                 --parallel-workers 3 \
-                 --cmake-args -DCMAKE_BUILD_TYPE=Release \
-                 --event-handlers console_direct+"
+    --parallel-workers 3 \
+    --cmake-args -DCMAKE_BUILD_TYPE=Release \
+    --event-handlers console_direct+"
 
 # Workspace root — all packages install into the same prefix so that later
 # packages can find earlier ones via source /workspaces/ros2_ws/install/setup.bash
@@ -60,7 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-colcon-common-extensions \
     python3-pip \
- && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 ##############################################################################
 # LAYER 2 — Isaac ROS binary packages
@@ -82,7 +82,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-isaac-ros-realsense \
     ros-humble-isaac-ros-common \
     ros-humble-image-transport-plugins \
- && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 ##############################################################################
 # LAYER 3 — RealSense config patches
@@ -112,7 +112,7 @@ RUN mkdir -p ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 5 — ros2_dji_serial (DJI serial bridge)
 ##############################################################################
-ARG RECLONE_SERIAL=8
+ARG RECLONE_SERIAL=9
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/ros2_dji_serial_bridge.git && \
     cd ${ROS_WS} && \
@@ -124,7 +124,7 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 6 — Realsense_ROI_Depth_Rectifier (depth utility)
 ##############################################################################
-ARG RECLONE_DEPTH=8
+ARG RECLONE_DEPTH=9
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
     cd ${ROS_WS} && \
@@ -138,13 +138,14 @@ RUN cd ${ROS_WS}/src && \
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
 # invalidates this layer and layer 9 below.
 ##############################################################################
-ARG RECLONE_BRIDGE=29
+ARG RECLONE_BRIDGE=30
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
     cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
     colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge --parallel-workers 3
+
 
 ##############################################################################
 # LAYER 8 — Environment + udev rules
@@ -156,7 +157,8 @@ RUN echo "source ${ROS_SETUP}" >> /etc/bash.bashrc && \
     echo "source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
 
 # sllidar udev rules — run from its source tree which was cloned in layer 4
-RUN source ${ROS_WS}/src/sllidar_ros2/scripts/create_udev_rules.sh
+# shouldn't be necessary anymore because we have dialout perms
+#RUN source ${ROS_WS}/src/sllidar_ros2/scripts/create_udev_rules.sh
 
 WORKDIR ${ROS_WS}
 CMD ["/bin/bash"]
