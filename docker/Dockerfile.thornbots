@@ -138,7 +138,7 @@ RUN cd ${ROS_WS}/src && \
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
 # invalidates this layer and layer 9 below.
 ##############################################################################
-ARG RECLONE_BRIDGE=30
+ARG RECLONE_BRIDGE=31
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
     cd ${ROS_WS} && \
