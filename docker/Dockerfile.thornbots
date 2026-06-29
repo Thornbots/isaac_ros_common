@@ -133,6 +133,17 @@ RUN cd ${ROS_WS}/src && \
     colcon build ${COLCON_OPTS} --packages-select roi_depth_query --parallel-workers 3
 
 ##############################################################################
+# LAYER IKD — SLAM
+#
+# IKD when it should be wont break anything i think 
+##############################################################################
+RUN cd ${ROS_WS}/src && \
+    git clone https://github.com/Thornbots/sentry_pkg.git && \
+    cd ${ROS_WS} && \
+    source ${ROS_SETUP} && \
+    source ${ROS_WS}/install/setup.bash && \
+    colcon build ${COLCON_OPTS} --packages-select sentry_pkg --parallel-workers 3
+##############################################################################
 # LAYER 7 — realsense-yolov8-nitros-bridge 
 #
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
@@ -145,7 +156,6 @@ RUN cd ${ROS_WS}/src && \
     source ${ROS_SETUP} && \
     source ${ROS_WS}/install/setup.bash && \
     colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge --parallel-workers 3
-
 
 ##############################################################################
 # LAYER 8 — Environment + udev rules
