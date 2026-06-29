@@ -137,6 +137,7 @@ RUN cd ${ROS_WS}/src && \
 #
 # IKD when it should be wont break anything i think 
 ##############################################################################
+ARG RECLONE_SENTRY=3
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/sentry_pkg.git && \
     cd ${ROS_WS} && \
@@ -149,7 +150,7 @@ RUN cd ${ROS_WS}/src && \
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
 # invalidates this layer and layer 9 below.
 ##############################################################################
-ARG RECLONE_BRIDGE=34
+ARG RECLONE_BRIDGE=35
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
     cd ${ROS_WS} && \
