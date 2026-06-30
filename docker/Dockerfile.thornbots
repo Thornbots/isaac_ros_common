@@ -124,7 +124,7 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 6 — Realsense_ROI_Depth_Rectifier (depth utility)
 ##############################################################################
-ARG RECLONE_DEPTH=10
+ARG RECLONE_DEPTH=11
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
     cd ${ROS_WS} && \
