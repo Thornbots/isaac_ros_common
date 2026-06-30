@@ -138,6 +138,19 @@ RUN cd ${ROS_WS}/src && \
 # IKD when it should be wont break anything i think 
 ##############################################################################
 ARG RECLONE_SENTRY=3
+# Runtime dependencies for sentry_pkg's auto.launch.py. colcon build does NOT
+# install a package's exec_depends (only rosdep/apt does), so the deps declared
+# in sentry_pkg/package.xml must be apt-installed explicitly here. sllidar_ros2
+# is built from source in layer 4; the Gazebo (ros_gz_*) sim deps in package.xml
+# are intentionally NOT installed on the robot image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-laser-filters \
+    ros-humble-slam-toolbox \
+    ros-humble-joint-state-publisher \
+    ros-humble-robot-state-publisher \
+    ros-humble-xacro \
+    ros-humble-rviz2 \
+    && rm -rf /var/lib/apt/lists/*
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/sentry_pkg.git && \
     cd ${ROS_WS} && \
