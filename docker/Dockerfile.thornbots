@@ -137,7 +137,7 @@ RUN cd ${ROS_WS}/src && \
 #
 # IKD when it should be wont break anything i think 
 ##############################################################################
-ARG RECLONE_SENTRY=3
+ARG RECLONE_SENTRY=6
 # Runtime dependencies for sentry_pkg's auto.launch.py. colcon build does NOT
 # install a package's exec_depends (only rosdep/apt does), so the deps declared
 # in sentry_pkg/package.xml must be apt-installed explicitly here. sllidar_ros2
