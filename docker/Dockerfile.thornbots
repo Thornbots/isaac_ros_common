@@ -112,7 +112,7 @@ RUN mkdir -p ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 5 — ros2_dji_serial (DJI serial bridge)
 ##############################################################################
-ARG RECLONE_SERIAL=10
+ARG RECLONE_SERIAL=11
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/ros2_dji_serial_bridge.git && \
     cd ${ROS_WS} && \
@@ -124,7 +124,7 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 6 — Realsense_ROI_Depth_Rectifier (depth utility)
 ##############################################################################
-ARG RECLONE_DEPTH=11
+ARG RECLONE_DEPTH=12
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
     cd ${ROS_WS} && \
@@ -137,7 +137,7 @@ RUN cd ${ROS_WS}/src && \
 #
 # IKD when it should be wont break anything i think 
 ##############################################################################
-ARG RECLONE_SENTRY=6
+ARG RECLONE_SENTRY=9
 # Runtime dependencies for sentry_pkg's auto.launch.py. colcon build does NOT
 # install a package's exec_depends (only rosdep/apt does), so the deps declared
 # in sentry_pkg/package.xml must be apt-installed explicitly here. sllidar_ros2
@@ -163,7 +163,7 @@ RUN cd ${ROS_WS}/src && \
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
 # invalidates this layer and layer 9 below.
 ##############################################################################
-ARG RECLONE_BRIDGE=35
+ARG RECLONE_BRIDGE=36
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
     cd ${ROS_WS} && \
