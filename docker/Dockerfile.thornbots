@@ -179,7 +179,12 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 RUN echo "source ${ROS_SETUP}" >> /etc/bash.bashrc && \
     echo "source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
-
+# Sends connections to devices over usbc cable
+ARG ROS_DOMAIN_ID=42
+ENV ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
+ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+ENV FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml
+COPY fastdds_cable.xml /etc/fastdds/profile.xml
 # sllidar udev rules — run from its source tree which was cloned in layer 4
 # shouldn't be necessary anymore because we have dialout perms
 #RUN source ${ROS_WS}/src/sllidar_ros2/scripts/create_udev_rules.sh

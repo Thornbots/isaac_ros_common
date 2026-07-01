@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles xmlns="http://eprosima.com" schemaLocation="http://eprosima.com http://eprosima.com.xsd">
+  <!-- Explicitly define the transport descriptor first -->
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>cable_transport</transport_id>
+      <type>UDPv4</type>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="unicast_robot_link" is_default_profile="true">
+    <rtps>
+      <!-- Bind to the defined transport descriptor -->
+      <userTransports>
+        <transport_id>cable_transport</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+      <builtin>
+        <initialPeersList>
+          <!-- Target the Remote Robot IP -->
+          <locator>
+            <udpv4>
+              <address>192.168.55.1</address>
+            </udpv4>
+          </locator>
+        </initialPeersList>
+      </builtin>
+    </rtps>
+  </participant>
+</profiles>
