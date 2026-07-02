@@ -112,7 +112,7 @@ RUN mkdir -p ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 5 — ros2_dji_serial (DJI serial bridge)
 ##############################################################################
-ARG RECLONE_SERIAL=11
+ARG RECLONE_SERIAL=12
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/ros2_dji_serial_bridge.git && \
     cd ${ROS_WS} && \
@@ -124,7 +124,7 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 6 — Realsense_ROI_Depth_Rectifier (depth utility)
 ##############################################################################
-ARG RECLONE_DEPTH=12
+ARG RECLONE_DEPTH=13
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
     cd ${ROS_WS} && \
@@ -184,6 +184,9 @@ ARG ROS_DOMAIN_ID=42
 ENV ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
 ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 ENV FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml
+RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc && \
+    echo "FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"  >> /etc/bash.bashrc && \
+    echo "RMW_IMPLEMENTATION=rmw_fastrtps_cpp"  >> /etc/bash.bashrc
 COPY fastdds_cable.xml /etc/fastdds/profile.xml
 # sllidar udev rules — run from its source tree which was cloned in layer 4
 # shouldn't be necessary anymore because we have dialout perms
