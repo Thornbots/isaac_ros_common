@@ -177,16 +177,14 @@ RUN cd ${ROS_WS}/src && \
 # Must come after sllidar (layer 4) because it sources its script.
 # Stays cached unless any earlier layer was invalidated.
 ##############################################################################
+ARG ROS_DOMAIN_ID=42
+RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc && \
+    echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"  >> /etc/bash.bashrc && \
+    echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"  >> /etc/bash.bashrc && \
+    echo "export RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS"  >> /etc/bash.bashrc
 RUN echo "source ${ROS_SETUP}" >> /etc/bash.bashrc && \
     echo "source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
 # Sends connections to devices over usbc cable
-ARG ROS_DOMAIN_ID=42
-ENV ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
-ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-ENV FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml
-RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc && \
-    echo "FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"  >> /etc/bash.bashrc && \
-    echo "RMW_IMPLEMENTATION=rmw_fastrtps_cpp"  >> /etc/bash.bashrc
 COPY fastdds_cable.xml /etc/fastdds/profile.xml
 # sllidar udev rules — run from its source tree which was cloned in layer 4
 # shouldn't be necessary anymore because we have dialout perms
