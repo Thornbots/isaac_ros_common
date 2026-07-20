@@ -8,6 +8,7 @@
 # Layer order (slowest/most-stable first → fastest/most-volatile last):
 #   1  base + system deps          (almost never changes)
 #   2  Isaac ROS apt packages      (changes on ROS release day only)
+#   2b Gazebo / ros_gz sim deps    (for src/sim, changes rarely)
 #   3  realsense configs patch     (changes rarely)
 #   4  sllidar_ros2                (lidar driver, stable)
 #   5  ros2_dji_serial             (serial/DJI driver, occasional)
@@ -85,6 +86,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 ##############################################################################
+# LAYER 2b — Gazebo / ros_gz simulation packages
+#
+# Needed by the `sim` package (isaac_ros-dev/src/sim, launches gz sim with
+# the ARCC_Field_2026 world). ros-humble-ros-gz pulls in Ignition Gazebo
+# Fortress (libignition-gazebo6), the ROS Humble default pairing, and
+# provides ros_gz_sim/ros_gz_bridge which `sim`'s package.xml exec_depends on.
+##############################################################################
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-ros-gz \
+    ros-humble-robot-state-publisher \
+    ros-humble-xacro \
+    && rm -rf /var/lib/apt/lists/*
+
+##############################################################################
 # LAYER 3 — RealSense config patches
 # Small COPY; only invalidated when the yaml files change.
 ##############################################################################
@@ -112,7 +127,7 @@ RUN mkdir -p ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 5 — ros2_dji_serial (DJI serial bridge)
 ##############################################################################
-ARG RECLONE_SERIAL=12
+ARG RECLONE_SERIAL=13
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/ros2_dji_serial_bridge.git && \
     cd ${ROS_WS} && \
@@ -137,26 +152,28 @@ RUN cd ${ROS_WS}/src && \
 #
 # IKD when it should be wont break anything i think 
 ##############################################################################
-ARG RECLONE_SENTRY=9
-# Runtime dependencies for sentry_pkg's auto.launch.py. colcon build does NOT
-# install a package's exec_depends (only rosdep/apt does), so the deps declared
-# in sentry_pkg/package.xml must be apt-installed explicitly here. sllidar_ros2
-# is built from source in layer 4; the Gazebo (ros_gz_*) sim deps in package.xml
-# are intentionally NOT installed on the robot image.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-humble-laser-filters \
-    ros-humble-slam-toolbox \
-    ros-humble-joint-state-publisher \
-    ros-humble-robot-state-publisher \
-    ros-humble-xacro \
-    ros-humble-rviz2 \
-    && rm -rf /var/lib/apt/lists/*
-RUN cd ${ROS_WS}/src && \
-    git clone https://github.com/Thornbots/sentry_pkg.git && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select sentry_pkg --parallel-workers 3
+# ARG RECLONE_SENTRY=11
+# # Runtime dependencies for sentry_pkg's auto.launch.py. colcon build does NOT
+# # install a package's exec_depends (only rosdep/apt does), so the deps declared
+# # in sentry_pkg/package.xml must be apt-installed explicitly here. sllidar_ros2
+# # is built from source in layer 4; the Gazebo (ros_gz_*) sim deps in package.xml
+# # are intentionally NOT installed on the robot image.
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     ros-humble-laser-filters \
+#     ros-humble-slam-toolbox \
+#     ros-humble-joint-state-publisher \
+#     ros-humble-robot-state-publisher \
+#     ros-humble-xacro \
+#     ros-humble-rviz2 \
+#     ros-humble-ros-gz \
+#     ignition-fortress \
+#     && rm -rf /var/lib/apt/lists/*
+# RUN cd ${ROS_WS}/src && \
+#     git clone https://github.com/Thornbots/sentry_pkg.git && \
+#     cd ${ROS_WS} && \
+#     source ${ROS_SETUP} && \
+#     source ${ROS_WS}/install/setup.bash && \
+#     colcon build ${COLCON_OPTS} --packages-select sentry_pkg --parallel-workers 3
 ##############################################################################
 # LAYER 7 — realsense-yolov8-nitros-bridge 
 #
@@ -180,8 +197,7 @@ RUN cd ${ROS_WS}/src && \
 ARG ROS_DOMAIN_ID=42
 RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc && \
     echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"  >> /etc/bash.bashrc && \
-    echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"  >> /etc/bash.bashrc && \
-    echo "export RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS"  >> /etc/bash.bashrc
+    echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"  >> /etc/bash.bashrc
 RUN echo "source ${ROS_SETUP}" >> /etc/bash.bashrc && \
     echo "source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
 # Sends connections to devices over usbc cable
