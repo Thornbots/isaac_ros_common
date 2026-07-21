@@ -192,6 +192,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-xacro \
     ros-humble-rviz2 \
     ros-humble-robot-localization \
+    ros-humble-nav2-amcl \
+    ros-humble-nav2-map-server \
+    ros-humble-nav2-lifecycle-manager \
     && rm -rf /var/lib/apt/lists/*
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/sentry_pkg.git && \
