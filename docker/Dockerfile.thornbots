@@ -14,9 +14,10 @@
 #   5  ros2_dji_serial             (serial/DJI driver, occasional)
 #   6  Realsense_ROI_Depth_Rect.   (depth utils, occasional)
 #   7  rf2o_laser_odometry         (lidar odometry for EKF fusion, occasional)
-#   8  SLAM (sentry_pkg)           (SLAM/nav deps + sentry_pkg clone+build, actively developed)
-#   9  realsense-yolov8-nitros-bridge  (our package, actively developed)
-#   10 udev rules + entrypoint     (depends on sllidar being installed)
+#   8  sentry_localization         (SLAM/AMCL/EKF deps + clone+build, actively developed)
+#   9  sentry_pkg                  (hw interface/description deps + clone+build, actively developed)
+#   10 realsense-yolov8-nitros-bridge  (our package, actively developed)
+#   11 udev rules + entrypoint     (depends on sllidar being installed)
 #
 # Usage
 # -----
@@ -100,7 +101,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # install and build it after attaching (sim is already bind-mounted at
 # isaac_ros-dev/src/sim, no clone needed -- see docker/scripts/install-sim.sh):
 #   sudo isaac_ros_common/docker/scripts/install-sim.sh
-# robot_state_publisher/xacro are still installed unconditionally in LAYER 8
+# robot_state_publisher/xacro are still installed unconditionally in LAYER 9
 # below since sentry_pkg (real hardware or sim) needs them either way.
 ##############################################################################
 # RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -143,7 +144,6 @@ RUN cd ${ROS_WS}/src && \
     source ${ROS_WS}/install/setup.bash && \
     colcon build ${COLCON_OPTS} --packages-select dji_serial_bridge --parallel-workers 3
 
-
 ##############################################################################
 # LAYER 6 — Realsense_ROI_Depth_Rectifier (depth utility)
 ##############################################################################
@@ -158,11 +158,9 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 7 — rf2o_laser_odometry (lidar odometry, feeds the EKF in LAYER 8)
 #
-# Not in apt for Humble; vendored from upstream (no Thornbots fork needed --
-# unlike sllidar_ros2, no local patches on top of it yet). Publishes
-# /scan_odom, a second odometry-shaped estimate from scan matching, to fuse
-# alongside wheel odometry (/odom) in sentry_pkg's EKF -- wheel odometry
-# alone drifts under wheel slip on the ARCC field's "Bumpy Road" zone.
+# Not in apt for Humble; vendored from upstream, no fork needed yet. Publishes
+# /scan_odom to fuse with wheel odometry (/odom) in sentry_localization's EKF
+# -- wheel odometry alone drifts on the ARCC field's "Bumpy Road" zone.
 ##############################################################################
 ARG RECLONE_RF2O=1
 RUN cd ${ROS_WS}/src && \
@@ -173,28 +171,43 @@ RUN cd ${ROS_WS}/src && \
     colcon build ${COLCON_OPTS} --packages-select rf2o_laser_odometry --parallel-workers 3
 
 ##############################################################################
-# LAYER 8 — SLAM (sentry_pkg)
+# LAYER 8 — sentry_localization (SLAM/AMCL/EKF)
 #
-# Runtime dependencies for sentry_pkg's auto.launch.py. colcon build does NOT
-# install a package's exec_depends (only rosdep/apt does), so the deps declared
-# in sentry_pkg/package.xml must be apt-installed explicitly here. sllidar_ros2
-# is built from source in layer 4; the Gazebo (ros_gz_*) sim deps in
-# package.xml are intentionally NOT installed on the robot image — real
-# hardware never launches gz-sim, only `sim` does (see LAYER 2b above,
-# not installed by default; install it manually if you need `sim`).
+# Split out of sentry_pkg: turns /odom + /scan into odom->root. colcon build
+# skips exec_depends, so its package.xml deps are apt-installed here.
+# rf2o_laser_odometry is built from source in layer 7.
 ##############################################################################
-ARG RECLONE_SENTRY=11
+ARG RECLONE_LOCALIZATION=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-laser-filters \
     ros-humble-slam-toolbox \
-    ros-humble-joint-state-publisher \
-    ros-humble-robot-state-publisher \
-    ros-humble-xacro \
-    ros-humble-rviz2 \
     ros-humble-robot-localization \
     ros-humble-nav2-amcl \
     ros-humble-nav2-map-server \
     ros-humble-nav2-lifecycle-manager \
+    && rm -rf /var/lib/apt/lists/*
+RUN cd ${ROS_WS}/src && \
+    git clone https://github.com/Thornbots/sentry_localization.git && \
+    cd ${ROS_WS} && \
+    source ${ROS_SETUP} && \
+    source ${ROS_WS}/install/setup.bash && \
+    colcon build ${COLCON_OPTS} --packages-select sentry_localization --parallel-workers 3
+
+##############################################################################
+# LAYER 9 — sentry_pkg (hardware interface + robot description)
+#
+# package.xml deps apt-installed here (colcon skips exec_depends). sllidar_ros2
+# built in layer 4; sentry_localization (exec_depend) built in layer 8. Gazebo
+# (ros_gz_*) sim deps are NOT installed here -- real hardware never launches
+# gz-sim; see LAYER 2b for `sim`.
+##############################################################################
+ARG RECLONE_SENTRY=11
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-joint-state-publisher \
+    ros-humble-joint-state-publisher-gui \
+    ros-humble-robot-state-publisher \
+    ros-humble-xacro \
+    ros-humble-rviz2 \
     && rm -rf /var/lib/apt/lists/*
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/sentry_pkg.git && \
@@ -204,10 +217,10 @@ RUN cd ${ROS_WS}/src && \
     colcon build ${COLCON_OPTS} --packages-select sentry_pkg --parallel-workers 3
 
 ##############################################################################
-# LAYER 9 — realsense-yolov8-nitros-bridge
+# LAYER 10 — realsense-yolov8-nitros-bridge
 #
 # This is last because it changes most often; bumping RECLONE_BRIDGE only
-# invalidates this layer and layer 10 below.
+# invalidates this layer and layer 11 below.
 ##############################################################################
 ARG RECLONE_BRIDGE=36
 RUN cd ${ROS_WS}/src && \
@@ -218,7 +231,7 @@ RUN cd ${ROS_WS}/src && \
     colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge --parallel-workers 3
 
 ##############################################################################
-# LAYER 10 — Environment + udev rules
+# LAYER 11 — Environment + udev rules
 #
 # Must come after sllidar (layer 4) because it sources its script.
 # Stays cached unless any earlier layer was invalidated.
