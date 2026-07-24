@@ -62,7 +62,24 @@ if [ "$#" -eq 0 ]; then
     usage
 fi
 
-CMD="$*"
+# printf %q (not "$*") -- "$*" space-joins argv into a flat string, which
+# loses each argument's original boundaries once it's re-parsed by the
+# inner `bash -lc` below. That's silently fine for a simple argv like
+# `python3 script.py --backend slam`, but breaks the moment any argument
+# itself needs to carry shell syntax -- e.g. wrapping in `bash -c "... >
+# out.log 2>&1"` to add custom redirection on top of dexec.sh's own
+# -- the embedded quotes/redirects get flattened away, `bash -c` ends up
+# only seeing its first *word* as the script (everything else becomes
+# stray positional params), and the process silently exits immediately
+# with empty output and no error. Hit exactly this running the
+# localization test bench in the background (2026-07-23) -- diagnosed via
+# empty /tmp/dexec_*.log + `ps aux` showing nothing running. `printf %q`
+# re-escapes each argument so it survives the round trip through the
+# inner shell as exactly one token, so callers don't need to avoid
+# spaces/quotes/redirects in their command; it also means you should NOT
+# add your own `> file 2>&1` wrapper for -d launches -- dexec.sh already
+# redirects to /tmp/dexec_$$.log for you (see below).
+CMD="$(printf '%q ' "$@")"
 SOURCE_ENV="export PS1='\$ ' && source /etc/bash.bashrc && source /workspaces/ros2_ws/install/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash"
 
 if [ "$DETACH" -eq 1 ]; then
