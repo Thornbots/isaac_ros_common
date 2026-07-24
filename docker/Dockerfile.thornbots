@@ -36,7 +36,7 @@ RUN sed -i 's/adduser \${USERNAME} sudo  >\/dev\/null/adduser \${USERNAME} sudo 
 
 # ─── Git URL overrides (useful for forks / private mirrors) ───────────────
 ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
-ARG RF2O_GIT_URL=https://github.com/MAPIRlab/rf2o_laser_odometry.git
+ARG RF2O_GIT_URL=https://github.com/Thornbots/rf2o_laser_odometry.git
 ARG RF2O_GIT_BRANCH=ros2
 
 # ─── Shared colcon flags ──────────────────────────────────────────────────
@@ -158,11 +158,17 @@ RUN cd ${ROS_WS}/src && \
 ##############################################################################
 # LAYER 7 — rf2o_laser_odometry (lidar odometry, feeds the EKF in LAYER 8)
 #
-# Not in apt for Humble; vendored from upstream, no fork needed yet. Publishes
-# /scan_odom to fuse with wheel odometry (/odom) in sentry_localization's EKF
-# -- wheel odometry alone drifts on the ARCC field's "Bumpy Road" zone.
+# Not in apt for Humble. Now a Thornbots fork (like sllidar_ros2 in LAYER 4)
+# rather than vendored straight from upstream: upstream only ever queries the
+# laser->base_frame_id TF once, on its first scan, and caches it for the
+# node's lifetime -- it assumes a rigidly-fixed sensor mount. Our lidar is
+# head-mounted and pans independently of the base (see sentry_pkg's URDF),
+# so that cached transform goes stale the moment the head moves. The fork
+# re-queries it every scan instead. Publishes /scan_odom to fuse with wheel
+# odometry (/odom) in sentry_localization's EKF -- wheel odometry alone
+# drifts on the ARCC field's "Bumpy Road" zone.
 ##############################################################################
-ARG RECLONE_RF2O=1
+ARG RECLONE_RF2O=2
 RUN cd ${ROS_WS}/src && \
     git clone --branch ${RF2O_GIT_BRANCH} ${RF2O_GIT_URL} && \
     cd ${ROS_WS} && \
