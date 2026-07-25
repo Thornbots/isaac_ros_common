@@ -184,6 +184,20 @@ RUN cd ${ROS_WS}/src && \
 # rf2o_laser_odometry is built from source in layer 7.
 ##############################################################################
 ARG RECLONE_LOCALIZATION=1
+# ros-humble-diagnostic-updater is pinned to >= 4.0.7 deliberately: 4.0.6 is
+# a header-only build that ships no libdiagnostic_updater.so at all, so any
+# node linking it dies at startup with
+#   "error while loading shared libraries: libdiagnostic_updater.so"
+# (exit code 127). It's a transitive dep of both robot_localization
+# (ekf_node) and nav2_lifecycle_manager, so a bad version silently takes out
+# the ekf and amcl localization_modes while slam keeps working -- which
+# reads like a localization regression rather than a packaging problem. Bit
+# this project twice (2026-07-20, 2026-07-25); see SESSION_NOTES.md.
+# The constraint goes through `apt-get satisfy`, not `apt-get install`:
+# "pkg (>= ver)" is Debian control-file dependency syntax, and apt-get
+# install does not accept it -- it treats the whole string as a package
+# name and fails with "Unable to locate package ros-humble-diagnostic-
+# updater (>". apt-get satisfy is the subcommand that parses it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-laser-filters \
     ros-humble-slam-toolbox \
@@ -191,6 +205,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-nav2-amcl \
     ros-humble-nav2-map-server \
     ros-humble-nav2-lifecycle-manager \
+    && apt-get satisfy -y --no-install-recommends \
+    "ros-humble-diagnostic-updater (>= 4.0.7)" \
     && rm -rf /var/lib/apt/lists/*
 RUN cd ${ROS_WS}/src && \
     git clone https://github.com/Thornbots/sentry_localization.git && \
