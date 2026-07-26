@@ -130,11 +130,14 @@ if [ "$DETACH" -eq 1 ]; then
         bash -lc "$SOURCE_ENV && setsid nohup $CMD > $LOG 2>&1 < /dev/null & disown"
     echo "started detached in $CONTAINER (log: $LOG)"
     echo "  read it with:  $0 -- cat $LOG"
-    echo "  find the launch pid:  $0 -- ps aux | grep 'ros2 launch' | grep -v grep"
+    echo "  find the launch pid:  $(dirname "$0")/kill_launch.sh -l"
     echo "  stop it with:  $(dirname "$0")/kill_launch.sh <launch-pid>"
 else
     # -i so piped stdin reaches the command (`echo x | dexec.sh -- cat`);
     # without it docker exec closes stdin and the command silently sees EOF.
+    # Trade-off: a command that prompts now WAITS instead of failing fast on
+    # EOF, and a dexec.sh call inside a `while read ... done < file` loop
+    # will consume the loop's input. Append `< /dev/null` for either case.
     exec docker exec -i -u "$USERNAME" --workdir "$WORKDIR" "$CONTAINER" \
         bash -lc "$SOURCE_ENV && $CMD"
 fi
