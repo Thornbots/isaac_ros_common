@@ -1,6 +1,6 @@
 #!/bin/bash
 # dexec.sh -- run a command inside the running isaac_ros_dev container with
-# the same environment a real interactive shell gets (ROS_DOMAIN_ID,
+# the DDS/ROS environment a real interactive shell gets (ROS_DOMAIN_ID,
 # RMW_IMPLEMENTATION, FASTRTPS profile via /etc/bash.bashrc) plus both
 # workspace installs sourced (/workspaces/ros2_ws for image-baked packages
 # like sllidar_ros2/rf2o_laser_odometry/robot_localization, and
@@ -15,6 +15,19 @@
 # healthy while missing real config, which caused real debugging pain
 # earlier in this project (see DOCKER.md's "Any docker exec running ROS
 # commands..." note for the full story).
+#
+# ONE DELIBERATE DIFFERENCE FROM THE USER'S TERMINAL -- package resolution.
+# /etc/bash.bashrc ends by sourcing ONLY /workspaces/ros2_ws/install, so an
+# interactive shell resolves a package present in both workspaces to the
+# image-baked GitHub clone. dexec.sh also sources
+# /workspaces/isaac_ros-dev/install afterward, which prepends it, so here
+# the locally-built copy (the bind-mounted src/ edit) wins instead --
+# measured 2026-07-26: isaac_ros-dev at AMENT_PREFIX_PATH position 3,
+# ros2_ws at 24. Packages NOT built locally (e.g. sllidar_ros2) still fall
+# through to ros2_ws. Net effect: the same `ros2 launch` can run different
+# code here than in the user's terminal. Always run `ros2 pkg prefix <pkg>`
+# through the SAME entry point you will launch from -- see DOCKER.md's
+# "Two workspaces" section.
 #
 # Usage:
 #   dexec.sh [-r] [-d] [-w WORKDIR] -- <command...>
@@ -62,6 +75,17 @@ if [ "$#" -eq 0 ]; then
     usage
 fi
 
+# Preflight: `docker exec` against a stopped/absent container fails with a
+# raw daemon error that doesn't say what to do about it. Note this script
+# never starts or builds anything itself -- launching the container is the
+# user's call (see the skill's "Never build the image yourself" note).
+if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
+    echo "dexec.sh: container '$CONTAINER' is not running." >&2
+    echo "  Ask the user to start it:  cd isaac_ros_common/scripts && ./run_dev.sh" >&2
+    echo "  (or set ISAAC_ROS_CONTAINER if the name differs)" >&2
+    exit 1
+fi
+
 # printf %q (not "$*") -- "$*" space-joins argv into a flat string, which
 # loses each argument's original boundaries once it's re-parsed by the
 # inner `bash -lc` below. That's silently fine for a simple argv like
@@ -80,15 +104,37 @@ fi
 # add your own `> file 2>&1` wrapper for -d launches -- dexec.sh already
 # redirects to /tmp/dexec_$$.log for you (see below).
 CMD="$(printf '%q ' "$@")"
-SOURCE_ENV="export PS1='\$ ' && source /etc/bash.bashrc && source /workspaces/ros2_ws/install/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash"
+
+# The whole env setup is grouped with stdout sent to /dev/null (stderr is
+# kept, so a genuine sourcing error still surfaces). Ubuntu's
+# /etc/bash.bashrc ends with a "To run a command as administrator (user
+# \"root\")..." sudo hint that prints on *every* interactive-guard-passing
+# source, on STDOUT -- without this redirect those two lines are prepended
+# to the output of every command, so host-side captures like
+# `X=$(dexec.sh -- ros2 pkg prefix foo)` come back with banner text glued
+# onto the value. Verified 2026-07-26.
+SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && source /workspaces/ros2_ws/install/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash ; } >/dev/null"
 
 if [ "$DETACH" -eq 1 ]; then
+    # $$ is the HOST shell's pid, expanded here before the string is sent
+    # into the container -- so LOG is exactly the path used inside, and can
+    # be reported from here. It has to be reported from here: `docker exec
+    # -d` detaches immediately and discards the inner command's stdout, so
+    # an `echo` on the container side (as this used to do) is never seen by
+    # the caller.
+    LOG="/tmp/dexec_$$.log"
     # setsid so the whole launch tree shares one process group, separate
     # from this docker exec's own -- kill_launch.sh needs that to clean up
     # the entire tree with one SIGINT instead of missing orphaned children.
-    exec docker exec -d -u "$USERNAME" --workdir "$WORKDIR" "$CONTAINER" \
-        bash -lc "$SOURCE_ENV && setsid nohup $CMD > /tmp/dexec_$$.log 2>&1 < /dev/null & disown; echo \"started (log: /tmp/dexec_$$.log)\""
+    docker exec -d -u "$USERNAME" --workdir "$WORKDIR" "$CONTAINER" \
+        bash -lc "$SOURCE_ENV && setsid nohup $CMD > $LOG 2>&1 < /dev/null & disown"
+    echo "started detached in $CONTAINER (log: $LOG)"
+    echo "  read it with:  $0 -- cat $LOG"
+    echo "  find the launch pid:  $0 -- ps aux | grep 'ros2 launch' | grep -v grep"
+    echo "  stop it with:  $(dirname "$0")/kill_launch.sh <launch-pid>"
 else
-    exec docker exec -u "$USERNAME" --workdir "$WORKDIR" "$CONTAINER" \
+    # -i so piped stdin reaches the command (`echo x | dexec.sh -- cat`);
+    # without it docker exec closes stdin and the command silently sees EOF.
+    exec docker exec -i -u "$USERNAME" --workdir "$WORKDIR" "$CONTAINER" \
         bash -lc "$SOURCE_ENV && $CMD"
 fi
