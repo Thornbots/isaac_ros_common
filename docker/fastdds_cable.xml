@@ -1,46 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<profiles xmlns="http://eprosima.com" schemaLocation="http://eprosima.com http://eprosima.com.xsd">
-  <!-- Explicitly define the transport descriptor first -->
+<profiles xmlns="http://eprosima.com" schemaLocation="http://eprosima.com http://com.xsd">
   <transport_descriptors>
     <transport_descriptor>
-      <transport_id>cable_transport</transport_id>
+      <transport_id>tailscale_transport</transport_id>
       <type>UDPv4</type>
     </transport_descriptor>
   </transport_descriptors>
   <participant profile_name="unicast_robot_link" is_default_profile="true">
     <rtps>
-      <!-- Bind to the defined transport descriptor, in addition to (not
-           instead of) the default UDP multicast + shared-memory
-           transports below. This is every interactive shell's default
-           RTPS profile (see Dockerfile.thornbots), so it needs to work
-           for local sim dev on localhost too, not just the real robot's
-           tethered link. -->
       <userTransports>
-        <transport_id>cable_transport</transport_id>
+        <transport_id>tailscale_transport</transport_id>
       </userTransports>
-      <!-- true (the FastDDS default): keeps builtin UDP multicast
-           discovery + shared-memory transports alive so nodes on the
-           same host (e.g. `ros2 launch sim sim.launch.py`) still find
-           each other normally. false here previously broke that
-           entirely, any node using this profile could only discover
-           peers reachable via the explicit initialPeersList entry below,
-           so a from-scratch sim session (nothing at 192.168.55.1) had
-           matching topics in introspection tools but zero actual data
-           delivery, since discovery/transport was restricted to a peer
-           that was never present. -->
-      <useBuiltinTransports>true</useBuiltinTransports>
-      <!-- No explicit initialPeersList: an explicit unicast SPDP peer that's
-           unreachable (e.g. the robot's tethered IP 192.168.55.1 with no
-           robot attached, which is true for all sim/dev work) measurably
-           breaks/delays local multicast discovery in practice, despite
-           useBuiltinTransports=true and despite the peer supposedly being
-           "additive" -- confirmed by removing it and watching discovery
-           recover (`ros2 topic list` went from ~2 topics to the full graph).
-           Normal multicast discovery (from useBuiltinTransports) already
-           finds the real robot over the tethered link when it's actually
-           connected, without needing to hardcode its IP here. See
-           DOCKER.md's Troubleshooting section and SESSION_NOTES.md
-           (2026-07-20) for the full writeup if this needs revisiting. -->
+      <useBuiltinTransports>false</useBuiltinTransports>
+      <builtin>
+        <discovery_config>
+          <discoveryProtocol>CLIENT</discoveryProtocol>
+        </discovery_config>
+      </builtin>
     </rtps>
   </participant>
 </profiles>
