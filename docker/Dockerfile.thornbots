@@ -258,7 +258,7 @@ RUN cd ${ROS_WS}/src && \
 # Must come after sllidar (layer 4) because it sources its script.
 # Stays cached unless any earlier layer was invalidated.
 ##############################################################################
-ARG ROS_DOMAIN_ID=42
+ARG ROS_DOMAIN_ID=0
 RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc && \
     echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"  >> /etc/bash.bashrc && \
     echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"  >> /etc/bash.bashrc
