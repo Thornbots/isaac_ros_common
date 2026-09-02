@@ -11,6 +11,11 @@
   See the isaac-ros-docker skill's reference.md for why there is no
   <useBuiltinTransports>false</useBuiltinTransports> or <interfaceWhiteList>.
 -->
+  <flow_controller profile_name="vpn_flow_control">
+    <scheduler>HIGH_PRIORITY</scheduler>
+    <max_bytes_per_period>125000</max_bytes_per_period> <!-- ~125 KB per token window -->
+    <period_ms>10</period_ms>                           <!-- Refresh token window every 10ms (~12.5 MB/s limit) -->
+  </flow_controller>
 <profiles xmlns="http://eprosima.com" schemaLocation="http://eprosima.com http://com.xsd">
   <participant profile_name="participant_profile" is_default_profile="true">
     <rtps>
@@ -59,4 +64,13 @@
       </builtin>
     </rtps>
   </participant>
+
+  <datawriter profile_name="default_writer_profile" is_default_profile="true">
+    <qos>
+      <publishMode>
+        <kind>ASYNCHRONOUS</kind>
+        <flow_controller_name>vpn_flow_control</flow_controller_name>
+      </publishMode>
+    </qos>
+  </datawriter>
 </profiles>
