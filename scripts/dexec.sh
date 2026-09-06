@@ -5,7 +5,7 @@
 # workspace installs sourced (/workspaces/ros2_ws for image-baked packages
 # like sllidar_ros2/rf2o_laser_odometry/robot_localization, and
 # /workspaces/isaac_ros-dev for this repo's own packages like
-# sentry_pkg/sim).
+# thornbots_pkg/sim).
 #
 # Exists because `docker exec ... bash -lc "source /etc/bash.bashrc && ..."`
 # silently does nothing on its own -- that file starts with
