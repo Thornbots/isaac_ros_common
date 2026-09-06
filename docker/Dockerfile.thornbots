@@ -223,7 +223,7 @@ RUN cd ${ROS_WS}/src && \
 # (ros_gz_*) sim deps are NOT installed here -- real hardware never launches
 # gz-sim; see LAYER 2b for `sim`.
 ##############################################################################
-ARG RECLONE_SENTRY=11
+ARG RECLONE_THORNBOTS=11
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-joint-state-publisher \
     ros-humble-joint-state-publisher-gui \
