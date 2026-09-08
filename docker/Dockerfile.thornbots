@@ -1,64 +1,32 @@
 ##############################################################################
-# Dockerfile.thornbots
+# Dockerfile.thornbots — Thornbots top layer over Isaac ROS.
 #
-# Each git-cloned package gets its OWN layer: clone → build → install.
-# Changing one package (or bumping its RECLONE_* ARG) only invalidates that
-# layer and everything after it — all earlier packages stay cached.
-#
-# Layer order (slowest/most-stable first → fastest/most-volatile last):
-#   1  base + system deps          (almost never changes)
-#   2  Isaac ROS apt packages      (changes on ROS release day only)
-#   2b Gazebo / ros_gz sim deps    (for src/sim, changes rarely)
-#   3  realsense configs patch     (changes rarely)
-#   4  sllidar_ros2                (lidar driver, stable)
-#   5  ros2_dji_serial             (serial/DJI driver, occasional)
-#   6  Realsense_ROI_Depth_Rect.   (depth utils, occasional)
-#   7  rf2o_laser_odometry         (lidar odometry for EKF fusion, occasional)
-#   8  sentry_localization         (SLAM/AMCL/EKF deps + clone+build, actively developed)
-#   9  thornbots_pkg                  (hw interface/description deps + clone+build, actively developed)
-#   10 realsense-yolov8-nitros-bridge  (our package, actively developed)
-#   11 udev rules + entrypoint     (depends on sllidar being installed)
-#
-# Usage
-# -----
-#   docker build -f Dockerfile.thornbots -t thornbots:latest .
-#
-#   # Force re-clone + rebuild of a single package without touching others:
-#   docker build --build-arg RECLONE_BRIDGE=2 -f Dockerfile.thornbots -t thornbots:latest .
+# Context is isaac_ros-dev/src/ (run_dev.sh passes --context_dir), so every
+# COPY path is relative to src/. Our packages come from the checked-out git
+# submodules, never a clone during the build. See README.md.
 ##############################################################################
 
 ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:humble-3.2
 FROM ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
+# Entrypoint patch: put the container user in `dialout` for serial devices.
 RUN sed -i 's/adduser \${USERNAME} sudo  >\/dev\/null/adduser \${USERNAME} sudo  >\/dev\/null\ngroupadd -f dialout >\/dev\/null\nadduser \${USERNAME} dialout >\/dev\/null/' \
     /usr/local/bin/scripts/workspace-entrypoint.sh
 
-# ─── Git URL overrides (useful for forks / private mirrors) ───────────────
-ARG SLLIDAR_GIT_URL=https://github.com/Thornbots/sllidar_ros2.git
-ARG RF2O_GIT_URL=https://github.com/Thornbots/rf2o_laser_odometry.git
-ARG RF2O_GIT_BRANCH=ros2
-
-# ─── Shared colcon flags ──────────────────────────────────────────────────
-# Limit parallelism so the Jetson/build host doesn't OOM during heavy builds.
+# Capped so the Jetson/build host doesn't OOM: -j6 compiler jobs,
+# 3 concurrent packages. --symlink-install keeps sources live-editable.
 ENV MAKEFLAGS="-j6"
-
-# Colcon options reused in every build step below.
-# --symlink-install lets us mount sources for live editing if needed.
-# We skip testing to keep the layer thin.
 ENV COLCON_OPTS="--symlink-install \
     --parallel-workers 3 \
     --cmake-args -DCMAKE_BUILD_TYPE=Release \
     --event-handlers console_direct+"
 
-# Workspace root — all packages install into the same prefix so that later
-# packages can find earlier ones via source /workspaces/ros2_ws/install/setup.bash
 ENV ROS_WS=/workspaces/ros2_ws
 ENV ROS_SETUP=/opt/ros/humble/setup.bash
 
 ##############################################################################
 # LAYER 1 — System build tools
-# Invalidated only when the list of apt packages changes.
 ##############################################################################
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -69,15 +37,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ##############################################################################
 # LAYER 2 — Isaac ROS binary packages
-# These are large; keeping them in their own layer avoids re-downloading on
-# every source-code change.
 ##############################################################################
-# this is copied from another section to avoid a docker build error
+# Yarn repo: copied from another section to avoid a docker build error.
 RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
     echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list && \
     apt-get update && apt-get install -y yarn && \
     corepack enable
-
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-isaac-ros-yolov8 \
@@ -90,173 +55,72 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 ##############################################################################
-# LAYER 2b — Gazebo / ros_gz simulation packages (NOT installed by default)
-#
-# Needed by the `sim` package (isaac_ros-dev/src/sim, launches gz sim with
-# the ARCC_Field_2026 world) — ros-humble-ros-gz pulls in Ignition Gazebo
-# Fortress (libignition-gazebo6) and provides ros_gz_sim/ros_gz_bridge which
-# `sim`'s package.xml exec_depends on. Not needed when running for real
-# (real hardware doesn't use gz-sim), so it's commented out of the default
-# build. If you want to run `sim` in a container built from this image,
-# install and build it after attaching (sim is already bind-mounted at
-# isaac_ros-dev/src/sim, no clone needed -- see docker/scripts/install-sim.sh):
+# LAYER 2b — Gazebo / ros_gz, for `sim` only. Off by default: real hardware
+# never launches gz-sim. To run `sim` in a container from this image:
 #   sudo isaac_ros_common/docker/scripts/install-sim.sh
-# robot_state_publisher/xacro are still installed unconditionally in LAYER 9
-# below since thornbots_pkg (real hardware or sim) needs them either way.
 ##############################################################################
 # RUN apt-get update && apt-get install -y --no-install-recommends \
 #     ros-humble-ros-gz \
 #     && rm -rf /var/lib/apt/lists/*
 
 ##############################################################################
-# LAYER 3 — RealSense config patches
-# Small COPY; only invalidated when the yaml files change.
+# LAYER 3 — RealSense config patches (60 fps profiles)
 ##############################################################################
-COPY config/realsense_mono_depth_60fps.yaml \
+COPY isaac_ros_common/docker/config/realsense_mono_depth_60fps.yaml \
     /opt/ros/humble/share/isaac_ros_realsense/config/realsense_mono_depth.yaml
 
-COPY config/realsense_mono_60fps.yaml \
+COPY isaac_ros_common/docker/config/realsense_mono_60fps.yaml \
     /opt/ros/humble/share/isaac_ros_realsense/config/realsense_mono.yaml
 
 ##############################################################################
-# LAYER 4 — sllidar_ros2 (LiDAR driver)
+# LAYER 4 — dependencies, resolved by rosdep from the manifests
 #
-# Bump RECLONE_SLLIDAR to force a fresh clone+build without touching layers 5+.
-# Because we source the workspace install at the start of each build step,
-# later packages can depend on earlier ones being installed.
+# Manifests only, so this layer survives source edits. rosdep derives the dep
+# set from package.xml instead of a hand-kept apt list that silently drifts.
+# --skip-keys and the version floor are load-bearing; see README.md.
 ##############################################################################
-ARG RECLONE_SLLIDAR=1
-RUN mkdir -p ${ROS_WS}/src && \
-    cd ${ROS_WS}/src && \
-    git clone ${SLLIDAR_GIT_URL} && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    colcon build ${COLCON_OPTS} --packages-select sllidar_ros2 --parallel-workers 3
-
-##############################################################################
-# LAYER 5 — ros2_dji_serial (DJI serial bridge)
-##############################################################################
-ARG RECLONE_SERIAL=13
-RUN cd ${ROS_WS}/src && \
-    git clone https://github.com/Thornbots/ros2_dji_serial_bridge.git && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select dji_serial_bridge --parallel-workers 3
-
-##############################################################################
-# LAYER 6 — Realsense_ROI_Depth_Rectifier (depth utility)
-##############################################################################
-ARG RECLONE_DEPTH=15
-RUN cd ${ROS_WS}/src && \
-    git clone https://github.com/Thornbots/Realsense_ROI_Depth_Rectifier.git && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select roi_depth_query --parallel-workers 3
-
-##############################################################################
-# LAYER 7 — rf2o_laser_odometry (lidar odometry, feeds the EKF in LAYER 8)
-#
-# Not in apt for Humble. Now a Thornbots fork (like sllidar_ros2 in LAYER 4)
-# rather than vendored straight from upstream: upstream only ever queries the
-# laser->base_frame_id TF once, on its first scan, and caches it for the
-# node's lifetime -- it assumes a rigidly-fixed sensor mount. Our lidar is
-# head-mounted and pans independently of the base (see thornbots_pkg's URDF),
-# so that cached transform goes stale the moment the head moves. The fork
-# re-queries it every scan instead. Publishes /scan_odom to fuse with wheel
-# odometry (/odom) in sentry_localization's EKF -- wheel odometry alone
-# drifts on the ARCC field's "Bumpy Road" zone.
-##############################################################################
-ARG RECLONE_RF2O=2
-RUN cd ${ROS_WS}/src && \
-    git clone --branch ${RF2O_GIT_BRANCH} ${RF2O_GIT_URL} && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select rf2o_laser_odometry --parallel-workers 3
-
-##############################################################################
-# LAYER 8 — sentry_localization (SLAM/AMCL/EKF)
-#
-# Split out of thornbots_pkg: turns /odom + /scan into odom->root. colcon build
-# skips exec_depends, so its package.xml deps are apt-installed here.
-# rf2o_laser_odometry is built from source in layer 7.
-##############################################################################
-ARG RECLONE_LOCALIZATION=1
-# ros-humble-diagnostic-updater is pinned to >= 4.0.7 deliberately: 4.0.6 is
-# a header-only build that ships no libdiagnostic_updater.so at all, so any
-# node linking it dies at startup with
-#   "error while loading shared libraries: libdiagnostic_updater.so"
-# (exit code 127). It's a transitive dep of both robot_localization
-# (ekf_node) and nav2_lifecycle_manager, so a bad version silently takes out
-# the ekf and amcl localization_modes while slam keeps working -- which
-# reads like a localization regression rather than a packaging problem. Bit
-# this project twice (2026-07-20, 2026-07-25); see SESSION_NOTES.md.
-# The constraint goes through `apt-get satisfy`, not `apt-get install`:
-# "pkg (>= ver)" is Debian control-file dependency syntax, and apt-get
-# install does not accept it -- it treats the whole string as a package
-# name and fails with "Unable to locate package ros-humble-diagnostic-
-# updater (>". apt-get satisfy is the subcommand that parses it.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-humble-laser-filters \
-    ros-humble-slam-toolbox \
-    ros-humble-robot-localization \
-    ros-humble-nav2-amcl \
-    ros-humble-nav2-map-server \
-    ros-humble-nav2-lifecycle-manager \
-    && apt-get satisfy -y --no-install-recommends \
+COPY sllidar_ros2/package.xml                   ${ROS_WS}/src/sllidar_ros2/package.xml
+COPY ros2_dji_serial_bridge/package.xml         ${ROS_WS}/src/ros2_dji_serial_bridge/package.xml
+COPY Realsense_ROI_Depth_Rectifier/package.xml  ${ROS_WS}/src/Realsense_ROI_Depth_Rectifier/package.xml
+COPY rf2o_laser_odometry/package.xml            ${ROS_WS}/src/rf2o_laser_odometry/package.xml
+COPY sentry_localization/package.xml            ${ROS_WS}/src/sentry_localization/package.xml
+COPY thornbots_pkg/package.xml                  ${ROS_WS}/src/thornbots_pkg/package.xml
+COPY realsense-yolov8-nitros-bridge/package.xml ${ROS_WS}/src/realsense-yolov8-nitros-bridge/package.xml
+RUN source ${ROS_SETUP} && \
+    apt-get update && \
+    rosdep install -y --from-paths ${ROS_WS}/src --ignore-src --rosdistro humble \
+        --skip-keys "realsense2_camera realsense2_camera_msgs" && \
+    apt-get satisfy -y --no-install-recommends \
     "ros-humble-diagnostic-updater (>= 4.0.7)" \
     && rm -rf /var/lib/apt/lists/*
-RUN cd ${ROS_WS}/src && \
-    git clone https://github.com/Thornbots/sentry_localization.git && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select sentry_localization --parallel-workers 3
 
 ##############################################################################
-# LAYER 9 — thornbots_pkg (hardware interface + robot description)
+# LAYER 5 — our packages: submodules in, one colcon build out.
 #
-# package.xml deps apt-installed here (colcon skips exec_depends). sllidar_ros2
-# built in layer 4; sentry_localization (exec_depend) built in layer 8. Gazebo
-# (ros_gz_*) sim deps are NOT installed here -- real hardware never launches
-# gz-sim; see LAYER 2b for `sim`.
+# One COPY per directory (a multi-source COPY flattens them, and copying the
+# whole context would drag in `sim`). Directory name != package name for
+# three of them, hence the explicit --packages-select list.
 ##############################################################################
-ARG RECLONE_THORNBOTS=11
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-humble-joint-state-publisher \
-    ros-humble-joint-state-publisher-gui \
-    ros-humble-robot-state-publisher \
-    ros-humble-xacro \
-    ros-humble-rviz2 \
-    && rm -rf /var/lib/apt/lists/*
-RUN cd ${ROS_WS}/src && \
-    git clone https://github.com/Thornbots/thornbots_pkg.git && \
-    cd ${ROS_WS} && \
+COPY sllidar_ros2                   ${ROS_WS}/src/sllidar_ros2
+COPY ros2_dji_serial_bridge         ${ROS_WS}/src/ros2_dji_serial_bridge
+COPY Realsense_ROI_Depth_Rectifier  ${ROS_WS}/src/Realsense_ROI_Depth_Rectifier
+COPY rf2o_laser_odometry            ${ROS_WS}/src/rf2o_laser_odometry
+COPY sentry_localization            ${ROS_WS}/src/sentry_localization
+COPY thornbots_pkg                  ${ROS_WS}/src/thornbots_pkg
+COPY realsense-yolov8-nitros-bridge ${ROS_WS}/src/realsense-yolov8-nitros-bridge
+RUN cd ${ROS_WS} && \
     source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select thornbots_pkg --parallel-workers 3
+    colcon build ${COLCON_OPTS} --packages-select \
+        sllidar_ros2 \
+        dji_serial_bridge \
+        roi_depth_query \
+        rf2o_laser_odometry \
+        sentry_localization \
+        thornbots_pkg \
+        realsense_yolov8_nitros_bridge
 
 ##############################################################################
-# LAYER 10 — realsense-yolov8-nitros-bridge
-#
-# This is last because it changes most often; bumping RECLONE_BRIDGE only
-# invalidates this layer and layer 11 below.
-##############################################################################
-ARG RECLONE_BRIDGE=36
-RUN cd ${ROS_WS}/src && \
-    git clone https://github.com/Thornbots/realsense-yolov8-nitros-bridge.git && \
-    cd ${ROS_WS} && \
-    source ${ROS_SETUP} && \
-    source ${ROS_WS}/install/setup.bash && \
-    colcon build ${COLCON_OPTS} --packages-select realsense_yolov8_nitros_bridge --parallel-workers 3
-
-##############################################################################
-# LAYER 11 — Environment + udev rules
-#
-# Must come after sllidar (layer 4) because it sources its script.
-# Stays cached unless any earlier layer was invalidated.
+# LAYER 6 — Environment + DDS profile
 ##############################################################################
 ARG ROS_DOMAIN_ID=0
 RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc && \
@@ -265,9 +129,8 @@ RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc && \
 RUN echo "source ${ROS_SETUP}" >> /etc/bash.bashrc && \
     echo "source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
 # Sends connections to devices over usbc cable
-COPY fastdds_cable.xml /etc/fastdds/profile.xml
-# sllidar udev rules — run from its source tree which was cloned in layer 4
-# shouldn't be necessary anymore because we have dialout perms
+COPY isaac_ros_common/docker/fastdds_cable.xml /etc/fastdds/profile.xml
+# sllidar udev rules — unnecessary now that the user is in `dialout`.
 #RUN source ${ROS_WS}/src/sllidar_ros2/scripts/create_udev_rules.sh
 
 WORKDIR ${ROS_WS}

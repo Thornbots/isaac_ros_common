@@ -1,20 +1,25 @@
 #!/bin/bash
 # install-sim.sh
 #
-# Installs the gz-sim (ros_gz) deps and builds the `sim` package
-# (isaac_ros-dev/src/sim, bind-mounted -- not cloned, no git step needed)
-# for containers built from Dockerfile.thornbots, which does not install
-# these by default since real hardware never launches gz-sim.
+# Installs `sim`'s dependencies (gz-sim via ros_gz, ...) and builds the
+# package. Dockerfile.thornbots leaves both out on purpose: real hardware
+# never launches gz-sim.
 #
 # Run once per container (as root / via sudo) after attaching, before using
 # `ros2 launch sim sim.launch.py`:
 #   sudo isaac_ros_common/docker/scripts/install-sim.sh
 set -e
 
+WS=/workspaces/isaac_ros-dev
+source "${ROS_SETUP:-/opt/ros/humble/setup.bash}"
+
+# Deps come from the manifests, same as Dockerfile.thornbots LAYER 4 --
+# --ignore-src covers our own packages, and realsense2_camera is skipped
+# because Dockerfile.realsense builds it from source (see docker/README.md).
 apt-get update
-apt-get install -y --no-install-recommends ros-humble-ros-gz
+rosdep install -y --from-paths "${WS}/src" --ignore-src --rosdistro humble \
+    --skip-keys "realsense2_camera realsense2_camera_msgs"
 rm -rf /var/lib/apt/lists/*
 
-source "${ROS_SETUP:-/opt/ros/humble/setup.bash}"
-cd /workspaces/isaac_ros-dev
+cd "${WS}"
 colcon build ${COLCON_OPTS} --packages-select sim
