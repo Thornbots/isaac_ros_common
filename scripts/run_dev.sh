@@ -202,7 +202,11 @@ print_info "Launching Isaac ROS Dev container with image key ${BASE_IMAGE_KEY}: 
 # Build image to launch
 if [[ $SKIP_IMAGE_BUILD -ne 1 ]]; then
     print_info "Building $BASE_IMAGE_KEY base as image: $BASE_NAME"
-   $ROOT/build_image_layers.sh --image_key "$BASE_IMAGE_KEY" --image_name "$BASE_NAME"
+    # Context is src/ (the submodule superproject), not docker/: the top layer
+    # (Dockerfile.thornbots) COPYs each package from the checked-out submodules
+    # instead of cloning it. Only the last layer uses --context_dir.
+   $ROOT/build_image_layers.sh --image_key "$BASE_IMAGE_KEY" --image_name "$BASE_NAME" \
+       --context_dir "$ROOT/../.."
 
     # Check result
     if [ $? -ne 0 ]; then
