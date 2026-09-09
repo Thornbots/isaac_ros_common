@@ -28,8 +28,16 @@ used to be `git clone`d during the build, with `RECLONE_*` build args to bust
 the cache per package; both are gone (changed 2026-09-08).
 
 The baked copy therefore tracks whatever the submodules are checked out at,
-**including uncommitted local edits**. Run `git submodule update` first if you
-want the image to match the remotes.
+**including uncommitted local edits**. That cuts both ways: your edit is in the
+image without any commit, and a teammate's clone at a stale gitlink builds the
+old code no matter how current the package remote is.
+
+`git submodule update` does **not** make the image match the remotes — it
+rewinds each submodule to the SHA the superproject has recorded, detaching HEAD.
+Run it on a package you committed but didn't bump the gitlink for and your work
+leaves the working tree silently (`git -C <pkg> checkout <branch>` gets it
+back). To sync against the remotes, use `git submodule update --remote`, which
+follows the `branch` key in `src/.gitmodules`.
 
 ## Why one layer for all seven packages
 
