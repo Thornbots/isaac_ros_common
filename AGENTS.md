@@ -30,7 +30,7 @@ file rather than editing an upstream one where you have the choice.
 
 ## Scope
 
-- Owns image layout, container entry, the discovery-server/FastDDS profile, and
+- Owns image layout, container entry, the FastDDS profile, and
   the `ROS_DOMAIN_ID`. Nothing about robot behavior.
 - Node code, launch files, and tuning belong to the package that owns them.
   Adding an apt dependency for a package means editing that package's
