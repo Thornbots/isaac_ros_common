@@ -1,61 +1,60 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Discovery-server client profile: tailscale0 has no usable multicast, so
-  cross-machine discovery goes through a server the publisher starts by hand
-  (scripts/dds_server.sh). Nothing discovers anything until it runs.
+  Default Fast DDS profile for every container shell (/etc/fastdds/profile.xml).
 
-  profile_name MUST be "participant_profile" (rmw_fastrtps looks it up by that
-  exact name; is_default_profile is not enough). Server prefixes below encode
-  the server id: `-i 0` yields 44.53.00.5f...; change the id, change the prefix.
-  Server and clients must share a ROS_DOMAIN_ID.
-  See the isaac-ros-docker skill's reference.md for why there is no
-  <useBuiltinTransports>false</useBuiltinTransports> or <interfaceWhiteList>.
+  SIMPLE discovery, so nodes on one machine find each other with no setup.
+  tailscale0 carries no multicast, so the robots' tailscale IPs are added as
+  unicast initial peers: a machine that lists a peer announces to it, and the
+  peer answers, so only one side has to list the other. Add a robot by adding
+  its tailscale IP below.
+
+  Invariants, each measured 2026-09-14:
+  - 239.255.0.1 must stay in initialPeersList. An explicit list replaces Fast
+    DDS's default multicast peer, which is what broke local discovery on
+    2026-07-20.
+  - maxInitialPeersRange 32: a peer's participant IDs past the range are never
+    announced to. At the default 4, a remote node with participant ID 12 was
+    never discovered; at 32 it was. A robot running more than 32 ROS processes
+    needs this raised.
+  - profile_name must be "participant_profile"; rmw_fastrtps looks it up by name.
+  See the isaac-ros-docker skill's reference.md for the history.
 -->
-<profiles xmlns="http://eprosima.com" schemaLocation="http://eprosima.com http://com.xsd">
+<profiles xmlns="http://eprosima.com">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>shm</transport_id>
+      <type>SHM</type>
+    </transport_descriptor>
+    <transport_descriptor>
+      <transport_id>udp</transport_id>
+      <type>UDPv4</type>
+      <maxInitialPeersRange>32</maxInitialPeersRange>
+    </transport_descriptor>
+  </transport_descriptors>
+
   <participant profile_name="participant_profile" is_default_profile="true">
     <rtps>
+      <!-- Same SHM + UDPv4 pair as the builtins, redeclared only to set
+           maxInitialPeersRange. -->
+      <useBuiltinTransports>false</useBuiltinTransports>
+      <userTransports>
+        <transport_id>shm</transport_id>
+        <transport_id>udp</transport_id>
+      </userTransports>
       <builtin>
         <discovery_config>
-          <!-- SUPER_CLIENT, not CLIENT: a plain client only learns the
-               endpoints it matches, so `ros2 topic list`/`hz`/rviz show an empty
-               graph and it reads exactly like broken discovery. -->
-          <discoveryProtocol>SUPER_CLIENT</discoveryProtocol>
-          <discoveryServersList>
-            <!-- ts-nano-standard, started with `-i 0` -->
-            <RemoteServer prefix="44.53.00.5f.45.50.52.4f.53.49.4d.41">
-              <metatrafficUnicastLocatorList>
-                <locator>
-                  <udpv4>
-                    <address>100.93.23.77</address>
-                    <port>11811</port>
-                  </udpv4>
-                </locator>
-              </metatrafficUnicastLocatorList>
-            </RemoteServer>
-            <!-- ts-nano-hero, started with `-i 1` -->
-            <RemoteServer prefix="44.53.01.5f.45.50.52.4f.53.49.4d.41">
-              <metatrafficUnicastLocatorList>
-                <locator>
-                  <udpv4>
-                    <address>100.89.195.53</address>
-                    <port>11811</port>
-                  </udpv4>
-                </locator>
-              </metatrafficUnicastLocatorList>
-            </RemoteServer>
-            <!-- ts-nano-sentry, started with `-i 2` -->
-            <RemoteServer prefix="44.53.02.5f.45.50.52.4f.53.49.4d.41">
-              <metatrafficUnicastLocatorList>
-                <locator>
-                  <udpv4>
-                    <address>100.87.215.118</address>
-                    <port>11811</port>
-                  </udpv4>
-                </locator>
-              </metatrafficUnicastLocatorList>
-            </RemoteServer>
-          </discoveryServersList>
+          <discoveryProtocol>SIMPLE</discoveryProtocol>
         </discovery_config>
+        <initialPeersList>
+          <!-- local multicast: same machine and same LAN -->
+          <locator><udpv4><address>239.255.0.1</address></udpv4></locator>
+          <!-- ts-nano-standard -->
+          <locator><udpv4><address>100.93.23.77</address></udpv4></locator>
+          <!-- ts-nano-hero -->
+          <locator><udpv4><address>100.89.195.53</address></udpv4></locator>
+          <!-- ts-nano-sentry -->
+          <locator><udpv4><address>100.87.215.118</address></udpv4></locator>
+        </initialPeersList>
       </builtin>
     </rtps>
   </participant>
