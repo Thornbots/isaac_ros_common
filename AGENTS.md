@@ -35,3 +35,13 @@ file rather than editing an upstream one where you have the choice.
 - Node code, launch files, and tuning belong to the package that owns them.
   Adding an apt dependency for a package means editing that package's
   `package.xml`, not hardcoding it into a layer here.
+
+## Open
+
+- **A full `colcon build` on the robots takes far too long.** Building all the
+  packages on the Orin is minutes of wall clock every time, and the compile
+  itself — not rosdep or the image pull — is the bulk of it. Worth attacking:
+  ccache in the image, `--packages-up-to`/`--packages-select` instead of a
+  whole-workspace rebuild, `Release` without debug symbols, capping the
+  parallel-worker count so the Orin doesn't thrash, or shipping prebuilt
+  binaries in the image so the robot only rebuilds what changed.
