@@ -72,3 +72,9 @@ file rather than editing an upstream one where you have the choice.
   LAYER 4 and 5 forces one full uncached rebuild on every machine, so do it
   between hardware sessions, not before one.
 
+## Committing
+
+This package is a submodule of `thornbots_workspace`, on branch `release-3.2`. Commit
+and push here first, then bump this gitlink in `../` — one logical change, one
+bump, never a gitlink pointing at an unpushed commit. Full rule in
+`../CLAUDE.md` § Packages.
