@@ -45,3 +45,15 @@ file rather than editing an upstream one where you have the choice.
   whole-workspace rebuild, `Release` without debug symbols, capping the
   parallel-worker count so the Orin doesn't thrash, or shipping prebuilt
   binaries in the image so the robot only rebuilds what changed.
+
+## Open
+
+- **The rplidar udev rule is not installed, and can't be without reclaiming a
+  layer.** `docker/udev_rules/98-rplidar.rules` and
+  `docker/scripts/hotplug-rplidar.sh` are the authoritative pair, but the
+  aarch64 image is at 127 layers against overlay2's ~128 cap, so the `COPY`s
+  fail on the robot with `max depth exceeded` (they build fine on x86_64 --
+  see `docker/README.md`). The zero-layer path is to install them from the
+  bind-mounted `src/` at container start, by extending the entrypoint patch
+  that already exists at the top of `Dockerfile.thornbots`. Nothing needs
+  `/dev/rplidar` yet, so this is not urgent.
