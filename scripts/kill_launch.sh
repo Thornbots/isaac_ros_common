@@ -25,10 +25,11 @@
 # reproduced 2026-07-26. Hence the pid==pgid check below.
 #
 # Set ISAAC_ROS_CONTAINER to override the container name (default
-# isaac_ros_dev-x86_64-container).
+# isaac_ros_dev-<uname -m>-container, so this works unchanged on the
+# x86_64 dev box and the aarch64 robots).
 set -euo pipefail
 
-CONTAINER="${ISAAC_ROS_CONTAINER:-isaac_ros_dev-x86_64-container}"
+CONTAINER="${ISAAC_ROS_CONTAINER:-isaac_ros_dev-$(uname -m)-container}"
 FORCE=0
 LIST=0
 
