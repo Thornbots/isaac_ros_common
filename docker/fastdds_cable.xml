@@ -8,6 +8,19 @@
   peer answers, so only one side has to list the other. Add a robot by adding
   its tailscale IP below.
 
+  SHM stays on: it is the fast path for intra-host traffic, and the image
+  topics are the reason. Its cost, measured 2026-09-20 on ts-nano-sentry: a
+  participant that uses SHM is nearly invisible to tooling started in a shell
+  on that same machine -- `ros2 node list` there saw 1 of 15 running nodes,
+  while a laptop saw all 15 over tailscale. So the nodes publishing the small
+  high-level topics (pose, odom, TF, CV targets) are launched against
+  `thornbots_pkg/config/fastdds_udp_only.xml` instead, which keeps them
+  visible from a robot terminal; `auto.launch.py dds_transport:=udp_only`
+  puts every node it launches on that profile.
+
+  Its initialPeersList has to match the one below -- adding a robot means
+  editing both files.
+
   Invariants, each measured 2026-09-14:
   - 239.255.0.1 must stay in initialPeersList. An explicit list replaces Fast
     DDS's default multicast peer, which is what broke local discovery on
