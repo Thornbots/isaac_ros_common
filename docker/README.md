@@ -146,17 +146,36 @@ The other four (`sllidar_ros2`, `rf2o_laser_odometry`, `sentry_localization`,
 lidar→base transform at startup, which breaks on our panning head. See
 `sentry_localization/README.md`.
 
-## LAYER 7: the RPLIDAR udev rule
+## The image is at the overlayfs layer cap
 
-`udev_rules/98-rplidar.rules` and `scripts/hotplug-rplidar.sh` go into the image
-at `/etc/udev/rules.d/` and `/opt/rplidar/`, the same placement
-`Dockerfile.realsense` uses for its RealSense pair. `workspace-entrypoint.sh`
-restarts udevd, so a lidar plugged in while the container runs gets
-`/dev/rplidar` at mode 0666, group `plugdev` — openable without root.
+`isaac_ros_dev-aarch64` on the sentry is **127 filesystem layers**; the x86_64
+image is 129. overlay2 refuses a mount past ~128 lower dirs, so adding any
+`RUN` or `COPY` to `Dockerfile.thornbots` can fail the build with:
 
-This is the authoritative copy. `sllidar_ros2/scripts/rplidar.rules` is the
-host-side one installed by that package's `create_udev_rules.sh`; it has no
-hotplug hook. Keep changes to the two in step.
+```
+failed to solve: failed to prepare ...: max depth exceeded
+```
 
-Nothing launches the lidar from `/dev/rplidar` yet: `thornbots_pkg`'s
-`auto.launch.py` still defaults `lidar_serial_port` to `/dev/ttyUSB0`.
+Measured 2026-09-20: a four-layer addition (`RUN mkdir`, two `COPY`, `RUN
+chmod`) built on the laptop and died on the robot at step 30/31, because the
+aarch64 base chain starts deeper. Before adding a layer here, check the headroom:
+
+```bash
+docker inspect isaac_ros_dev-$(uname -m) --format '{{len .RootFS.Layers}}'
+```
+
+Fold new work into an existing `RUN` instead, or install it at container start
+from the bind-mounted `src/` (which costs no layer at all, and takes effect
+without a rebuild).
+
+## The RPLIDAR udev rule is not installed
+
+`udev_rules/98-rplidar.rules` and `scripts/hotplug-rplidar.sh` are the
+authoritative copies -- `sllidar_ros2/scripts/rplidar.rules` is host-side only,
+with no hotplug hook -- but nothing copies them into the image, because of the
+layer cap above. Consequence: no `/dev/rplidar` symlink inside the container.
+
+Nothing depends on it today. `thornbots_pkg`'s `auto.launch.py` opens
+`/dev/ttyUSB0`, and the container user is in `dialout`, so the lidar works
+without the rule; the rule only buys a stable name when a second USB serial
+device shows up.
