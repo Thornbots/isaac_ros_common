@@ -35,12 +35,3 @@ file rather than editing an upstream one where you have the choice.
 - Node code, launch files, and tuning belong to the package that owns them.
   Adding an apt dependency for a package means editing that package's
   `package.xml`, not hardcoding it into a layer here.
-
-## Open
-
-- **The rplidar udev rule and hotplug script are dead weight.** No Dockerfile
-  copies `docker/udev_rules/98-rplidar.rules` to `/etc/udev/rules.d/` or
-  `docker/scripts/hotplug-rplidar.sh` to `/opt/rplidar/` (`Dockerfile.realsense`
-  does exactly that for its RealSense equivalents). A second, diverged copy of
-  both lives in `../sllidar_ros2/scripts/`. Decide which copy is authoritative
-  and either install it or delete it.
