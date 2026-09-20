@@ -57,3 +57,18 @@ file rather than editing an upstream one where you have the choice.
   bind-mounted `src/` at container start, by extending the entrypoint patch
   that already exists at the top of `Dockerfile.thornbots`. Nothing needs
   `/dev/rplidar` yet, so this is not urgent.
+
+- **`Dockerfile.thornbots` spends 25 layers, 16 of them on tiny `COPY`s.**
+  Census of `isaac_ros_dev-aarch64` (2026-09-20, 127 layers total): ~90 come
+  from the NVIDIA base image, 6 from `Dockerfile.realsense`, 25 from ours --
+  and 16 of ours are the seven `package.xml` COPYs, the seven package COPYs,
+  and the two realsense config YAMLs, holding under 20 MB between them.
+  Reclaiming ~13 gets back the headroom the rplidar rule needs:
+  `COPY --parents */package.xml` for LAYER 4 (one layer, needs the
+  `dockerfile:1.7-labs` syntax directive, and keeps the manifests-only
+  caching LAYER 4 exists for), a single `COPY .` for LAYER 5 (one more
+  `.dockerignore` rule so `isaac_ros_common/docker/` stays out of `src/`),
+  and merging LAYER 6's two `echo >> /etc/bash.bashrc` RUNs. Rewriting
+  LAYER 4 and 5 forces one full uncached rebuild on every machine, so do it
+  between hardware sessions, not before one.
+
