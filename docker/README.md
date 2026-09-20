@@ -145,3 +145,18 @@ The other four (`sllidar_ros2`, `rf2o_laser_odometry`, `sentry_localization`,
 `rf2o_laser_odometry` is a Thornbots fork, not upstream — upstream caches the
 lidar→base transform at startup, which breaks on our panning head. See
 `sentry_localization/README.md`.
+
+## LAYER 7: the RPLIDAR udev rule
+
+`udev_rules/98-rplidar.rules` and `scripts/hotplug-rplidar.sh` go into the image
+at `/etc/udev/rules.d/` and `/opt/rplidar/`, the same placement
+`Dockerfile.realsense` uses for its RealSense pair. `workspace-entrypoint.sh`
+restarts udevd, so a lidar plugged in while the container runs gets
+`/dev/rplidar` at mode 0666, group `plugdev` — openable without root.
+
+This is the authoritative copy. `sllidar_ros2/scripts/rplidar.rules` is the
+host-side one installed by that package's `create_udev_rules.sh`; it has no
+hotplug hook. Keep changes to the two in step.
+
+Nothing launches the lidar from `/dev/rplidar` yet: `thornbots_pkg`'s
+`auto.launch.py` still defaults `lidar_serial_port` to `/dev/ttyUSB0`.

@@ -130,5 +130,15 @@ RUN echo "source ${ROS_SETUP}" >> /etc/bash.bashrc && \
     echo "source ${ROS_WS}/install/setup.bash" >> /etc/bash.bashrc
 COPY isaac_ros_common/docker/fastdds_cable.xml /etc/fastdds/profile.xml
 
+##############################################################################
+# LAYER 7 — RPLIDAR hotplug, same pattern as Dockerfile.realsense does for the
+# RealSense: rule + script live in the image, the entrypoint restarts udevd.
+# Gives the lidar a stable /dev/rplidar at mode 0666. See docker/README.md.
+##############################################################################
+RUN mkdir -p /opt/rplidar
+COPY isaac_ros_common/docker/scripts/hotplug-rplidar.sh /opt/rplidar/hotplug-rplidar.sh
+COPY isaac_ros_common/docker/udev_rules/98-rplidar.rules /etc/udev/rules.d/98-rplidar.rules
+RUN chmod +x /opt/rplidar/hotplug-rplidar.sh
+
 WORKDIR ${ROS_WS}
 CMD ["/bin/bash"]
