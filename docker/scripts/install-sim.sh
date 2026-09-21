@@ -21,5 +21,10 @@ rosdep install -y --from-paths "${WS}/src" --ignore-src --rosdistro humble \
     --skip-keys "realsense2_camera realsense2_camera_msgs"
 rm -rf /var/lib/apt/lists/*
 
-cd "${WS}"
-colcon build ${COLCON_OPTS} --packages-select sim
+# Build as the workspace owner, not root: build/ and install/ are bind-mounted
+# from the host, and root-owned files there break the next non-root
+# `colcon build`. --symlink-install is explicit because sudo's env_reset
+# drops the image's COLCON_OPTS.
+OWNER_UID=$(stat -c %u "${WS}")
+sudo -u "#${OWNER_UID}" bash -c "source '${ROS_SETUP:-/opt/ros/humble/setup.bash}' \
+    && cd '${WS}' && colcon build --symlink-install ${COLCON_OPTS} --packages-select sim"
