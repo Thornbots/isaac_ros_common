@@ -1,8 +1,8 @@
 #!/bin/bash
 # install-sim.sh
 #
-# Installs `sim`'s dependencies -- gz-sim via ros_gz from apt, and SAPIEN
-# (sim_engine:=sapien) from pip -- and builds the package.
+# Installs `sim`'s dependencies -- gz-sim via ros_gz from apt, and trimesh
+# from pip for tools/simplify_urdf.py -- and builds the package.
 # Dockerfile.thornbots leaves all of it out on purpose: real hardware never
 # launches a sim.
 #
@@ -22,12 +22,9 @@ rosdep install -y --from-paths "${WS}/src" --ignore-src --rosdistro humble \
     --skip-keys "realsense2_camera realsense2_camera_msgs"
 rm -rf /var/lib/apt/lists/*
 
-# sapien_sim.py's engine and its Embree lidar. --no-deps is required, not
-# tidiness: SAPIEN's dependencies include opencv-python, which would shadow
-# the system cv2 the CV stack uses. SAPIEN imports fine without it, and the
-# node creates no renderer, so no GPU or Vulkan is needed. transforms3d is
-# not optional: `import sapien` pulls in its viewer module, which imports it.
-pip install --no-deps sapien trimesh embreex transforms3d
+# tools/simplify_urdf.py regenerates urdf/sentry_v2 from the CAD export.
+# --no-deps keeps pip from touching the apt numpy the ROS stack uses.
+pip install --no-deps trimesh
 
 # Build as the workspace owner, not root: build/ and install/ are bind-mounted
 # from the host, and root-owned files there break the next non-root
