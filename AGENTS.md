@@ -1,86 +1,80 @@
 # isaac_ros_common: agent notes
 
-Vendored fork of
-[NVIDIA-ISAAC-ROS/isaac_ros_common](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common).
-**This repo's default branch is `release-3.2`, not `main`** — commit there. It
-holds the container: the Dockerfile chain, the build and exec scripts, the DDS
-profiles, and the udev rules. The ROS packages in the top level
-(`isaac_ros_test`, the `*_interfaces` packages, …) are upstream's and we don't
-build them.
+**Branch `jazzy`**: upstream
+[NVIDIA-ISAAC-ROS/isaac_ros_common](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common)
+`release-4.6` with our container files on top. `release-3.2` stays the
+Humble branch until the cutover (`../JAZZY_PLAN.md` step 6). Upstream's
+top-level ROS packages (`isaac_ros_test`, the `*_interfaces`, …) are theirs
+and we don't build them.
+
+Upstream 4.x ships no `docker/` or `scripts/`: `isaac-ros-cli` builds and
+starts the container. Our files:
+
+- `docker/Dockerfile.thornbots`, the top layer. Read
+  [`docker/README.md`](docker/README.md) before changing it.
+- `docker/config/`, `docker/fastdds_cable.xml`, the rplidar udev rule and
+  hotplug script, `docker/scripts/entrypoint_additions/`,
+  `docker/scripts/install-sim.sh`.
+- The CLI config: `.isaac-ros-cli/config.yaml`,
+  `scripts/.isaac_ros_common-config`, `scripts/.build_image_layers.yaml`,
+  linked into place by `scripts/setup_workspace.sh`.
+- `scripts/dexec.sh`, `scripts/kill_launch.sh`,
+  `scripts/install_isaac_ros_cli.sh`.
 
 **Read [`.claude/skills/isaac-ros-docker`](../.claude/skills/isaac-ros-docker/)
-before running anything here**, and
-[`docker/README.md`](docker/README.md) before changing `Dockerfile.thornbots`.
-That file covers the build context, why the seven packages share one layer, what
-LAYER 4's rosdep pass can and can't resolve, and why `sim` is left out.
+before running anything here.** Agents never run `isaac-ros activate` in any
+form, nor build the image; the user does. `reference.md` there lists where
+the CLI reads each config file, taken from its source.
 
-Unlike the other packages, this one is **not** copied into `/workspaces/ros2_ws`,
-so the shadowing trap doesn't apply. But `scripts/` and `docker/` are read from
-`src/` at container-launch time, so an edit takes effect on the next `run_dev.sh`
-or `dexec.sh` with no rebuild.
+Not copied into `/workspaces/ros2_ws`, so the shadowing trap doesn't apply.
+`scripts/` is read from `src/` at run time, so a `dexec.sh` edit takes effect
+with no rebuild; `docker/` edits need one.
 
-## Keep the fork diff small
+## Host setup
 
-Everything outside `docker/Dockerfile.thornbots`, `docker/README.md`,
-`docker/config/`, `docker/udev_rules/98-rplidar.rules`,
-`docker/scripts/hotplug-rplidar.sh`, `docker/fastdds_cable.xml`,
-`scripts/dexec.sh`, and `scripts/kill_launch.sh` is upstream code we want to be
-able to re-merge from a newer Isaac ROS release. Add Thornbots behavior in a new
-file rather than editing an upstream one where you have the choice.
+- Ubuntu hosts and the robots: the `isaac-ros-cli` apt package
+  (`release-4`, `noble`), then `sudo isaac-ros init docker`.
+- The Arch laptop has no apt: `scripts/install_isaac_ros_cli.sh` installs
+  release-4.6 under `~/.local/share/isaac-ros-cli` with no root, and
+  `~/.local/bin/isaac-ros` runs it.
+- Then, per workspace, `scripts/setup_workspace.sh`, and run the CLI with
+  `ISAAC_ROS_WS` set to that workspace. The laptop's `~/.zshrc` exports the
+  Humble one.
+- During the migration the Jazzy workspace is `~/workspaces/isaac_ros-jazzy`
+  and its container `isaac_ros_jazzy_container`, beside the Humble
+  `isaac_ros_dev-x86_64-container`. The scripts read the name from
+  `.isaac-ros-cli/config.yaml`; `ISAAC_ROS_CONTAINER` overrides.
 
 ## Scope
 
-- Owns image layout, container entry, the FastDDS profile, and
-  the `ROS_DOMAIN_ID`. Nothing about robot behavior.
+- Owns image layout, container entry, the FastDDS profile, and the
+  `ROS_DOMAIN_ID` (1 until the cutover). Nothing about robot behavior.
 - Node code, launch files, and tuning belong to the package that owns them.
-  Adding an apt dependency for a package means editing that package's
-  `package.xml`, not hardcoding it into a layer here.
+  A package's apt dependency goes in its `package.xml`, not in a layer here.
 
 ## Open
 
-- **Jazzy removes most of this repo upstream.** Isaac ROS 4.x's
-  `isaac_ros_common` has no `docker/` or `scripts/`; the Dockerfiles and
-  `run_dev` moved to the `isaac-ros-cli` apt package. The Jazzy move puts our
-  files on a `jazzy` branch cut from upstream `release-4.6`, and drops
-  `run_dev.sh`, `build_image_layers.sh` and the upstream Dockerfiles. Plan:
-  `../JAZZY_PLAN.md` step 2. Until the cutover, `release-3.2` stays the
-  branch to commit to.
-
-- **A full `colcon build` on the robots takes far too long.** Building all the
-  packages on the Orin is minutes of wall clock every time, and the compile
-  itself — not rosdep or the image pull — is the bulk of it. Worth attacking:
-  ccache in the image, `--packages-up-to`/`--packages-select` instead of a
-  whole-workspace rebuild, `Release` without debug symbols, capping the
-  parallel-worker count so the Orin doesn't thrash, or shipping prebuilt
-  binaries in the image so the robot only rebuilds what changed.
-
-- **The rplidar udev rule is not installed, and can't be without reclaiming a
-  layer.** `docker/udev_rules/98-rplidar.rules` and
-  `docker/scripts/hotplug-rplidar.sh` are the authoritative pair, but the
-  aarch64 image is at 127 layers against overlay2's ~128 cap, so the `COPY`s
-  fail on the robot with `max depth exceeded` (they build fine on x86_64 --
-  see `docker/README.md`). The zero-layer path is to install them from the
-  bind-mounted `src/` at container start, by extending the entrypoint patch
-  that already exists at the top of `Dockerfile.thornbots`. Nothing needs
-  `/dev/rplidar` yet, so this is not urgent.
-
-- **`Dockerfile.thornbots` spends 25 layers, 16 of them on tiny `COPY`s.**
-  Census of `isaac_ros_dev-aarch64` (2026-09-20, 127 layers total): ~90 come
-  from the NVIDIA base image, 6 from `Dockerfile.realsense`, 25 from ours --
-  and 16 of ours are the seven `package.xml` COPYs, the seven package COPYs,
-  and the two realsense config YAMLs, holding under 20 MB between them.
-  Reclaiming ~13 gets back the headroom the rplidar rule needs:
-  `COPY --parents */package.xml` for LAYER 4 (one layer, needs the
-  `dockerfile:1.7-labs` syntax directive, and keeps the manifests-only
-  caching LAYER 4 exists for), a single `COPY .` for LAYER 5 (one more
-  `.dockerignore` rule so `isaac_ros_common/docker/` stays out of `src/`),
-  and merging LAYER 6's two `echo >> /etc/bash.bashrc` RUNs. Rewriting
-  LAYER 4 and 5 forces one full uncached rebuild on every machine, so do it
-  between hardware sessions, not before one.
+- **Layer count on aarch64 is unmeasured.** The Humble image hit 127 of
+  overlay2's ~128 on the robot. The Jazzy image is 42 on x86_64 (8 of them
+  ours); count it on `ts-nano-dev` once it's reachable (JAZZY_PLAN.md step 2).
+- **The CLI mounts the host's `~/.bashrc` and `~/.profile` read-only** into
+  `/home/admin`, so container shells source them. The laptop's `.profile`
+  sources `~/.cargo/env`, which prints a harmless error on every
+  `dexec.sh` call; a robot `.bashrc` that sources `/opt/ros/humble` would
+  be worse. Check each host's dotfiles before its first Jazzy run.
+- **The stock `.isaac_ros_dev-dockerargs` mounts `~/.config` read-write** (and
+  `~/.ssh`, `~/.aws`, `~/.cache`) on apt installs. The laptop's user install
+  has no such file. Decide on the robots whether to ship an empty
+  `scripts/.isaac_ros_dev-dockerargs`, which replaces it.
+- **The rplidar udev rule is installed but untested** in a container.
+- **Full `colcon build` on the robots is slow.** Ideas: ccache in the image,
+  `--packages-up-to` instead of whole-workspace builds, capping workers on
+  the Orin, shipping more prebuilt in the image. Re-time on JetPack 7.2
+  (JAZZY_PLAN.md step 5).
 
 ## Committing
 
-This package is a submodule of `thornbots_workspace`, on branch `release-3.2`. Commit
-and push here first, then bump this gitlink in `../` — one logical change, one
-bump, never a gitlink pointing at an unpushed commit. Full rule in
-`../CLAUDE.md` § Packages.
+This package is a submodule of `thornbots_workspace`. Commit and push here
+first, then bump the gitlink in `../`: one logical change, one bump, never a
+gitlink pointing at an unpushed commit. Full rule in `../CLAUDE.md` §
+Packages.
