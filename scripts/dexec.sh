@@ -38,17 +38,19 @@
 #             later (see that script for why this matters)
 #   -w DIR    override workdir (default /workspaces/isaac_ros-dev)
 #
-# Set ISAAC_ROS_CONTAINER to override the container name (default
-# isaac_ros_dev-<uname -m>-container, so this works unchanged on the
-# x86_64 dev box and the aarch64 robots).
+# Container name: $ISAAC_ROS_CONTAINER, else docker.run.container_name from
+# ../.isaac-ros-cli/config.yaml (the one `isaac-ros activate` starts), else
+# the CLI's default isaac_ros_dev_container.
 #
 # Examples:
 #   ./dexec.sh -- ros2 topic list
 #   ./dexec.sh -d -- ros2 launch sim sim.launch.py
-#   ./dexec.sh -r -- apt-get install -y ros-humble-foo
+#   ./dexec.sh -r -- apt-get install -y ros-jazzy-foo
 set -euo pipefail
 
-CONTAINER="${ISAAC_ROS_CONTAINER:-isaac_ros_dev-$(uname -m)-container}"
+CONFIG="$(dirname "$(realpath "$0")")/../.isaac-ros-cli/config.yaml"
+CONTAINER="${ISAAC_ROS_CONTAINER:-$(sed -n "s/^ *container_name: *['\"]\{0,1\}\([^'\" #]*\).*/\1/p" "$CONFIG" 2>/dev/null || true)}"
+CONTAINER="${CONTAINER:-isaac_ros_dev_container}"
 USERNAME="admin"
 WORKDIR="/workspaces/isaac_ros-dev"
 DETACH=0
@@ -82,7 +84,7 @@ fi
 # user's call (see the skill's "Never build the image yourself" note).
 if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
     echo "dexec.sh: container '$CONTAINER' is not running." >&2
-    echo "  Ask the user to start it:  cd isaac_ros_common/scripts && ./run_dev.sh" >&2
+    echo "  Ask the user to start it:  isaac-ros activate  (with ISAAC_ROS_WS set)" >&2
     echo "  (or set ISAAC_ROS_CONTAINER if the name differs)" >&2
     exit 1
 fi
