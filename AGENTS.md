@@ -37,6 +37,16 @@ with no rebuild; `docker/` edits need one.
 - The Arch laptop has no apt: `scripts/install_isaac_ros_cli.sh` installs
   release-4.6 under `~/.local/share/isaac-ros-cli` with no root, and
   `~/.local/bin/isaac-ros` runs it.
+- **The CLI starts the container with `--gpus all`, which Docker 28+
+  resolves through the CDI spec in `/etc/cdi/nvidia.yaml`.** A stale spec
+  still passes the GPU device nodes through (`--privileged`), but no driver
+  libraries: no `libcuda`, no `libEGL_nvidia`, so gz and rviz fall back to
+  Mesa's software GL and CUDA nodes can't start. Arch's
+  `nvidia-container-toolkit` ships no refresh unit, so regenerate after
+  every driver update: `sudo nvidia-ctk cdi generate
+  --output=/etc/cdi/nvidia.yaml`, then restart the container. `smoke.sh`
+  step 1 checks for it. Humble's `run_dev.sh` used `--runtime nvidia`,
+  which never reads CDI.
 - Then, per workspace, `scripts/setup_workspace.sh`, and run the CLI with
   `ISAAC_ROS_WS` set to that workspace. The laptop's `~/.zshrc` exports the
   Humble one.
