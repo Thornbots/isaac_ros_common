@@ -18,8 +18,14 @@ source "${ROS_SETUP}"
 # Deps come from the manifests, same as Dockerfile.thornbots' rosdep layer.
 # --ignore-src covers our own packages, and realsense2_camera is skipped
 # because the CLI's Dockerfile.realsense builds it from source.
+# isaac_ros_common is left out: its upstream packages are unbuilt, and 4.6's
+# isaac_ros_test pulls ~3 GB of CUDA torch through python3-torch-pip-shim.
 apt-get update
-rosdep install -y --from-paths "${WS}/src" --ignore-src --rosdistro jazzy \
+PKG_DIRS=()
+for d in "${WS}"/src/*/; do
+    [ "$(basename "$d")" = isaac_ros_common ] || PKG_DIRS+=("$d")
+done
+rosdep install -y --from-paths "${PKG_DIRS[@]}" --ignore-src --rosdistro jazzy \
     --skip-keys "realsense2_camera realsense2_camera_msgs"
 rm -rf /var/lib/apt/lists/*
 
