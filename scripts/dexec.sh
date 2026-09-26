@@ -116,7 +116,9 @@ CMD="$(printf '%q ' "$@")"
 # to the output of every command, so host-side captures like
 # `X=$(dexec.sh -- ros2 pkg prefix foo)` come back with banner text glued
 # onto the value. Verified 2026-07-26.
-SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && source /workspaces/ros2_ws/install/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash ; } >/dev/null"
+# The workspace install is optional: a fresh workspace has none until its
+# first colcon build.
+SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && source /workspaces/ros2_ws/install/setup.bash && { [ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash ; } ; } >/dev/null"
 
 if [ "$DETACH" -eq 1 ]; then
     # $$ is the HOST shell's pid, expanded here before the string is sent
