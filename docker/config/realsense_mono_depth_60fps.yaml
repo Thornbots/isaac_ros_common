@@ -1,10 +1,13 @@
-# Replaces the default realsense config file with one that is 60fps
+# isaac_ros_realsense 4.6.0's realsense_mono_depth.yaml at 60 fps instead of 15.
 rgb_camera:
-  profile: '640x480x60'
+  color_profile: '640x480x60'
+  profile: '640x480x60' # For backwards compatibility
 color_qos: "SYSTEM_DEFAULT"
 
 depth_module:
-  profile: '640x480x60'
+  depth_profile: '640x480x60'
+  infra_profile: '640x480x60'
+  profile: '640x480x60' # For backwards compatibility
   emitter_enabled: 0
   emitter_on_off: false
 depth_qos: "SYSTEM_DEFAULT"
@@ -13,4 +16,5 @@ depth_info_qos: "SYSTEM_DEFAULT"
 enable_infra1: false
 enable_infra2: false
 
-align_depth.enable: true
+align_depth:
+  enable: true

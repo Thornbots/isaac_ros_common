@@ -1,3 +1,4 @@
+# isaac_ros_realsense 4.6.0's realsense_mono.yaml at 60 fps instead of 15.
 device_type: ''
 serial_no: ''
 usb_port_id: ''
@@ -10,5 +11,6 @@ enable_infra1: false
 enable_infra2: false
 
 rgb_camera:
-  profile: '640x480x60'
+  color_profile: '640x480x60'
+  profile: '640x480x60' # For backwards compatibility
 color_qos: "SYSTEM_DEFAULT"
