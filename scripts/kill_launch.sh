@@ -24,12 +24,14 @@
 # running, with a "Sending SIGINT..." message that looks like it worked --
 # reproduced 2026-07-26. Hence the pid==pgid check below.
 #
-# Set ISAAC_ROS_CONTAINER to override the container name (default
-# isaac_ros_dev-<uname -m>-container, so this works unchanged on the
-# x86_64 dev box and the aarch64 robots).
+# Container name: $ISAAC_ROS_CONTAINER, else docker.run.container_name from
+# ../.isaac-ros-cli/config.yaml (the one `isaac-ros activate` starts), else
+# the CLI's default isaac_ros_dev_container.
 set -euo pipefail
 
-CONTAINER="${ISAAC_ROS_CONTAINER:-isaac_ros_dev-$(uname -m)-container}"
+CONFIG="$(dirname "$(realpath "$0")")/../.isaac-ros-cli/config.yaml"
+CONTAINER="${ISAAC_ROS_CONTAINER:-$(sed -n "s/^ *container_name: *['\"]\{0,1\}\([^'\" #]*\).*/\1/p" "$CONFIG" 2>/dev/null || true)}"
+CONTAINER="${CONTAINER:-isaac_ros_dev_container}"
 FORCE=0
 LIST=0
 
