@@ -1,0 +1,10 @@
+# isaac-ros-cli reads this from $ISAAC_ROS_WS/scripts/ (setup_workspace.sh links
+# it there) by sourcing it with bash. It stops at the first config it finds, so
+# the CLI's own docker dir is listed too. Absolute paths: $ISAAC_ROS_WS/scripts
+# is a symlink, and relative dirs through it resolve differently in Python and
+# in docker buildx. ISAAC_ROS_CLI_ETC is set by the user install
+# (install_isaac_ros_cli.sh); apt installs use /etc/isaac-ros-cli.
+CONFIG_DOCKER_SEARCH_DIRS=(
+    "$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../docker")"
+    "${ISAAC_ROS_CLI_ETC:-/etc/isaac-ros-cli}/docker"
+)
