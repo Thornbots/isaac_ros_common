@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Default Fast DDS profile for every container shell (/etc/fastdds/profile.xml).
+
+  SIMPLE discovery, so nodes on one machine find each other with no setup.
+  tailscale0 carries no multicast, so the robots' tailscale IPs are added as
+  unicast initial peers: a machine that lists a peer announces to it, and the
+  peer answers, so only one side has to list the other. Add a robot by adding
+  its tailscale IP below.
+
+  SHM stays on: it is the fast path for intra-host traffic, and the image
+  topics are the reason. Its cost, measured 2026-09-20 on ts-nano-sentry: a
+  participant that uses SHM is nearly invisible to tooling started in a shell
+  on that same machine -- `ros2 node list` there saw 1 of 15 running nodes,
+  while a laptop saw all 15 over tailscale. So the nodes publishing the small
+  high-level topics (pose, odom, TF, CV targets) are launched against
+  `thornbots_pkg/config/fastdds_udp_only.xml` instead, which keeps them
+  visible from a robot terminal; `auto.launch.py dds_transport:=udp_only`
+  puts every node it launches on that profile.
+
+  Its initialPeersList has to match the one below -- adding a robot means
+  editing both files.
+
+  Invariants, each measured 2026-09-14:
+  - 239.255.0.1 must stay in initialPeersList. An explicit list replaces Fast
+    DDS's default multicast peer, which is what broke local discovery on
+    2026-07-20.
+  - maxInitialPeersRange 32: a peer's participant IDs past the range are never
+    announced to. At the default 4, a remote node with participant ID 12 was
+    never discovered; at 32 it was. A robot running more than 32 ROS processes
+    needs this raised.
+  - profile_name must be "participant_profile"; rmw_fastrtps looks it up by name.
+  See the isaac-ros-docker skill's reference.md for the history.
+-->
+<profiles xmlns="http://eprosima.com">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>shm</transport_id>
+      <type>SHM</type>
+    </transport_descriptor>
+    <transport_descriptor>
+      <transport_id>udp</transport_id>
+      <type>UDPv4</type>
+      <maxInitialPeersRange>32</maxInitialPeersRange>
+    </transport_descriptor>
+  </transport_descriptors>
+
+  <participant profile_name="participant_profile" is_default_profile="true">
+    <rtps>
+      <!-- Same SHM + UDPv4 pair as the builtins, redeclared only to set
+           maxInitialPeersRange. -->
+      <useBuiltinTransports>false</useBuiltinTransports>
+      <userTransports>
+        <transport_id>shm</transport_id>
+        <transport_id>udp</transport_id>
+      </userTransports>
+      <builtin>
+        <discovery_config>
+          <discoveryProtocol>SIMPLE</discoveryProtocol>
+        </discovery_config>
+        <initialPeersList>
+          <!-- local multicast: same machine and same LAN -->
+          <locator><udpv4><address>239.255.0.1</address></udpv4></locator>
+          <!-- ts-nano-standard -->
+          <locator><udpv4><address>100.93.23.77</address></udpv4></locator>
+          <!-- ts-nano-hero -->
+          <locator><udpv4><address>100.89.195.53</address></udpv4></locator>
+          <!-- ts-nano-sentry -->
+          <locator><udpv4><address>100.87.215.118</address></udpv4></locator>
+        </initialPeersList>
+      </builtin>
+    </rtps>
+  </participant>
+</profiles>
