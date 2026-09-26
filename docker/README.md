@@ -1,137 +1,131 @@
 # `Dockerfile.thornbots`
 
-The Thornbots top layer over Isaac ROS, built as
-`ros2_humble.realsense.thornbots` (see `scripts/.isaac_ros_common-config`).
-It installs the Isaac ROS apt packages this project needs, patches the
-RealSense config YAMLs to 60 fps, and builds our seven packages into
-`/workspaces/ros2_ws`.
+The Thornbots top layer over Isaac ROS 4.6 on ROS 2 Jazzy. `isaac-ros-cli`
+builds the chain `isaac_ros` -> `realsense` -> `thornbots`: the first two
+Dockerfiles ship with the CLI, this one is ours. It installs the Isaac ROS apt
+packages we use, builds our seven packages into `/workspaces/ros2_ws`, and
+drops in the 60 fps RealSense profiles, the DDS profile and the rplidar udev
+rule.
+
+## Building
+
+On the host, once per clone, then build and start:
+
+```bash
+src/isaac_ros_common/scripts/setup_workspace.sh
+export ISAAC_ROS_WS=~/workspaces/isaac_ros-dev   # the workspace holding this src/
+isaac-ros activate --build-local
+```
+
+`setup_workspace.sh` links `scripts/`, `.isaac-ros-cli/` and
+`scripts/.build_image_layers.yaml` to where the CLI reads them; its header
+lists the three paths. Without it the CLI finds none of our config and starts
+a stock image.
+
+The image tag is `nvcr.io/nvidia/isaac/ros:isaac_ros-realsense-thornbots_<hash>-<platform>`,
+where `<hash>` covers the three Dockerfiles and the apt build args, **not the
+package sources**. So after a package edit, `activate` finds the old image and
+starts it. To bake the edit in, remove that tag and build again; BuildKit's
+cache reruns only the layers whose inputs changed:
+
+```bash
+docker rmi nvcr.io/nvidia/isaac/ros:isaac_ros-realsense-thornbots_<hash>-amd64
+isaac-ros activate --build-local
+```
+
+`--no-cache` also rebuilds the `isaac_ros` and `realsense` layers from
+scratch, which takes much longer.
+
+`isaac-ros activate` exits 0 even when the build fails. Read the output.
 
 ## Build context is `src/`, not `docker/`
 
-`run_dev.sh` passes `--context_dir "$ROOT/../.."` to `build_image_layers.sh`,
-which applies it to the last layer only — the other Dockerfiles in the chain
-still build against `docker/`. So every `COPY` path in `Dockerfile.thornbots`
-is relative to `isaac_ros-dev/src/`, and building it by hand means:
+`scripts/.build_image_layers.yaml` sets `context_overrides: thornbots: ../..`,
+relative to this directory. Every `COPY` path in `Dockerfile.thornbots` is
+relative to `isaac_ros-dev/src/`, and `src/.dockerignore` keeps `.git`,
+build artifacts, `sim/` and everything in `isaac_ros_common/` except
+`docker/` out of the context.
+
+Building it by hand (the base is the CLI's realsense layer):
 
 ```bash
 cd ~/workspaces/isaac_ros-dev/src
-docker build -f isaac_ros_common/docker/Dockerfile.thornbots -t thornbots:latest .
+docker build -f isaac_ros_common/docker/Dockerfile.thornbots \
+    --build-arg BASE_IMAGE=<realsense image> -t thornbots:latest .
 ```
-
-`src/.dockerignore` keeps `.git` and build artifacts out; the context is
-~35 MB rather than ~155 MB.
 
 ## Sources come from the submodules
 
-Our packages are `COPY`ed from the checked-out git submodules in `src/`. They
-used to be `git clone`d during the build, with `RECLONE_*` build args to bust
-the cache per package; both are gone (changed 2026-09-08).
+Packages are `COPY`ed from the checked-out submodules, **uncommitted edits
+included**. A teammate's clone at a stale gitlink builds the old code no
+matter how current the package remote is. `git submodule update` rewinds each
+submodule to the recorded SHA and detaches HEAD; `git submodule update
+--remote` follows the `branch` key in `src/.gitmodules`.
 
-The baked copy therefore tracks whatever the submodules are checked out at,
-**including uncommitted local edits**. That cuts both ways: your edit is in the
-image without any commit, and a teammate's clone at a stale gitlink builds the
-old code no matter how current the package remote is.
+## Layers
 
-`git submodule update` does **not** make the image match the remotes — it
-rewinds each submodule to the SHA the superproject has recorded, detaching HEAD.
-Run it on a package you committed but didn't bump the gitlink for and your work
-leaves the working tree silently (`git -C <pkg> checkout <branch>` gets it
-back). To sync against the remotes, use `git submodule update --remote`, which
-follows the `branch` key in `src/.gitmodules`.
+| layer | what | reruns when |
+|---|---|---|
+| 1 | apt: build tools and the `ros-jazzy-isaac-ros-*` packages | this file changes |
+| 2 | `COPY --parents */package.xml`, then `rosdep install` | a `package.xml` changes |
+| 3 | `COPY` of every package, then one `colcon build` | any source changes |
+| 4 | `COPY` of `docker/`, then one `RUN` that installs the config files | anything in `docker/` changes |
 
-## Why one layer for all seven packages
+`--parents` and `--exclude` need the `dockerfile:1.7-labs` syntax line at the
+top. Layer 3 excludes `isaac_ros_common/` and the top-level `*.md` files, so
+editing a plan doesn't rebuild the packages.
 
-They share a single `COPY` group and a single `colcon build` (LAYER 5), so
-touching any one of them rebuilds all seven. The per-package layers this
-replaced didn't buy much: the packages move together, so bumping an early one
-already invalidated every layer after it, and the sequential builds gave up
-colcon's cross-package parallelism. One invocation also lets colcon
-topologically order the build instead of the layer order hardcoding it.
+All seven packages share one `colcon build`, so touching one rebuilds all
+seven. The packages move together anyway, and one invocation lets colcon order
+and parallelise them. When iterating on one package, `colcon build` inside the
+running container instead.
 
-Their dependencies stay in their own layer (LAYER 4), since colcon skips
-`exec_depends` and a source edit shouldn't re-run a few hundred MB of apt.
+The Humble image sat at 127 of overlay2's ~128 layers on aarch64, 25 of them
+from this file. On x86_64 (2026-09-26) the Jazzy image is 42: `isaac_ros` 25,
+`realsense` 9, this file 8 (the four above plus a 4 kB `WORKDIR`). Check
+headroom with
+`docker inspect <image> --format '{{len .RootFS.Layers}}'`.
 
-When iterating on one package, don't rebuild the image at all — `colcon build`
-inside the running container is far faster.
+## rosdep and `--skip-keys`
 
-## LAYER 4: rosdep, and the three things it can't do
-
-LAYER 4 copies **only the seven `package.xml` manifests**, then runs
+Layer 2 runs
 
 ```
-rosdep install -y --from-paths $ROS_WS/src --ignore-src --rosdistro humble \
+rosdep install -y --from-paths $ROS_WS/src --ignore-src --rosdistro jazzy \
     --skip-keys "realsense2_camera realsense2_camera_msgs"
 ```
 
-Manifests-only is what makes the layer cache: editing source doesn't touch a
-`package.xml`, so the dependency install is skipped. `--ignore-src` covers the
-inter-package deps (`thornbots_pkg` → `sentry_localization` → `rf2o_laser_odometry`,
-etc.), which resolve locally because all seven manifests are present.
+The CLI's `Dockerfile.realsense` builds `realsense2_camera` from source with
+bloom and strips the `ros-jazzy-librealsense2` dependency so it links against
+the librealsense it built. Letting rosdep resolve those keys from apt could
+pull the stock debs over the custom ones. `--ignore-src` covers the
+inter-package deps, which resolve because all seven manifests are present.
 
-`rosdep` itself is already initialized by `Dockerfile.ros2_humble` (lines
-135-140), including NVIDIA's `extra_rosdeps.yaml`, so the `isaac_ros_*` keys
-resolve to the apt packages LAYER 2 already installed.
+The Humble image pinned `ros-humble-diagnostic-updater >= 4.0.7` because 4.0.6
+shipped no `libdiagnostic_updater.so`. Jazzy ships 4.2.x, so the pin is gone.
 
-This replaced a hand-maintained apt list (changed 2026-09-08). Two things
-still can't come from the manifests:
+## Container user, udev, environment
 
-**`--skip-keys realsense2_camera realsense2_camera_msgs`.** `Dockerfile.realsense`
-builds these from source with bloom and deliberately strips the
-`ros-humble-librealsense2` dependency from the generated debian control file
-(line 41) so they link against the librealsense *it* built from source. Letting
-rosdep satisfy those keys from apt would install the stock debs over the custom
-ones and pull apt's librealsense2 alongside the source build. Two packages
-declare `realsense2_camera`, so without the skip this happens on every build.
-
-**The `diagnostic-updater` version floor**, below — rosdep resolves a key to a
-package name, never to a version constraint.
-
-The old hand-kept list also carried `rviz2`, `joint_state_publisher` and
-`joint_state_publisher-gui`, which no manifest in the image declares. All three
-are gone from LAYER 4 (2026-09-08). Only the `-gui` one actually leaves the
-image: `Dockerfile.ros2_humble` already installs `rviz2` (twice, lines 125 and
-218) and `joint_state_publisher` (line 199), along with `slam_toolbox` and
-`robot_state_publisher` — so much of the old list was shadowing the base layer.
-Nothing in the workspace launches `joint_state_publisher_gui`; if you want it
-back for URDF work, `apt-get install ros-humble-joint-state-publisher-gui` in
-the container.
-
-## The `diagnostic-updater` version floor
-
-`ros-humble-diagnostic-updater` is pinned to `>= 4.0.7` deliberately. 4.0.6 is
-a header-only build that ships no `libdiagnostic_updater.so` at all, so any
-node linking it dies at startup with
-
-```
-error while loading shared libraries: libdiagnostic_updater.so
-```
-
-and exit code 127. It's a transitive dep of both `robot_localization`
-(`ekf_node`) and `nav2_lifecycle_manager`, so a bad version silently takes out
-the `ekf` and `amcl` localization modes while `slam` keeps working — which
-reads like a localization regression rather than a packaging problem. This bit
-the project twice, 2026-07-20 and 2026-07-25.
-
-The constraint goes through `apt-get satisfy`, not `apt-get install`:
-`pkg (>= ver)` is Debian control-file dependency syntax, and `apt-get install`
-treats the whole string as a package name and fails with `Unable to locate
-package ros-humble-diagnostic-updater (>`.
+- `dialout`: `scripts/entrypoint_additions/50-dialout.sh`, which the CLI's
+  `workspace-entrypoint.sh` sources as root at container start.
+- `udev_rules/98-rplidar.rules` and `scripts/hotplug-rplidar.sh` go to
+  `/etc/udev/rules.d/` and `/opt/rplidar/`.
+- `/etc/bash.bashrc` gets `ROS_DOMAIN_ID` (build arg, default 1 until the
+  Jazzy cutover), the FastDDS profile, `rmw_fastrtps_cpp`, and the Jazzy and
+  `ros2_ws` setup files.
 
 ## `sim` is deliberately not in the image
 
-Real hardware never launches gz-sim, so neither `sim`'s dependencies (LAYER 2b,
-commented out) nor the package itself is baked in. This makes `sim` the one
-first-party package with no `/workspaces/ros2_ws` shadow copy, so `src/sim`
-edits are live immediately. A fresh container needs this once before its
-first sim launch:
+Real hardware never launches gz-sim, so `sim` and its dependencies stay out.
+It is the one first-party package with no `/workspaces/ros2_ws` copy, so
+`src/sim` edits are live immediately. A fresh container needs this once
+before its first sim launch:
 
 ```bash
 sudo isaac_ros_common/docker/scripts/install-sim.sh
 ```
 
 ## Directory name vs. ROS package name
-
-Three don't match, which is why LAYER 5 lists packages explicitly:
 
 | directory in `src/` | ROS package |
 |---|---|
@@ -140,42 +134,6 @@ Three don't match, which is why LAYER 5 lists packages explicitly:
 | `realsense-yolov8-nitros-bridge` | `realsense_yolov8_nitros_bridge` |
 
 The other four (`sllidar_ros2`, `rf2o_laser_odometry`, `sentry_localization`,
-`thornbots_pkg`) are the same in both.
-
-`rf2o_laser_odometry` is a Thornbots fork, not upstream — upstream caches the
-lidar→base transform at startup, which breaks on our panning head. See
-`sentry_localization/README.md`.
-
-## The image is at the overlayfs layer cap
-
-`isaac_ros_dev-aarch64` on the sentry is **127 filesystem layers**; the x86_64
-image is 129. overlay2 refuses a mount past ~128 lower dirs, so adding any
-`RUN` or `COPY` to `Dockerfile.thornbots` can fail the build with:
-
-```
-failed to solve: failed to prepare ...: max depth exceeded
-```
-
-Measured 2026-09-20: a four-layer addition (`RUN mkdir`, two `COPY`, `RUN
-chmod`) built on the laptop and died on the robot at step 30/31, because the
-aarch64 base chain starts deeper. Before adding a layer here, check the headroom:
-
-```bash
-docker inspect isaac_ros_dev-$(uname -m) --format '{{len .RootFS.Layers}}'
-```
-
-Fold new work into an existing `RUN` instead, or install it at container start
-from the bind-mounted `src/` (which costs no layer at all, and takes effect
-without a rebuild).
-
-## The RPLIDAR udev rule is not installed
-
-`udev_rules/98-rplidar.rules` and `scripts/hotplug-rplidar.sh` are the
-authoritative copies -- `sllidar_ros2/scripts/rplidar.rules` is host-side only,
-with no hotplug hook -- but nothing copies them into the image, because of the
-layer cap above. Consequence: no `/dev/rplidar` symlink inside the container.
-
-Nothing depends on it today. `thornbots_pkg`'s `auto.launch.py` opens
-`/dev/ttyUSB0`, and the container user is in `dialout`, so the lidar works
-without the rule; the rule only buys a stable name when a second USB serial
-device shows up.
+`thornbots_pkg`) match. `rf2o_laser_odometry` is a Thornbots fork: upstream
+caches the lidar-to-base transform at startup, which breaks on our panning
+head (see `sentry_localization/README.md`).
