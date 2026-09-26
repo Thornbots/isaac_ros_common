@@ -1,0 +1,11 @@
+# Workspace layer of isaac-ros-cli's config, read from
+# $ISAAC_ROS_WS/.isaac-ros-cli/ (setup_workspace.sh links it there).
+# dexec.sh, kill_launch.sh and smoke.sh read container_name from here.
+version: 2
+docker:
+  image:
+    additional_image_keys:
+      - realsense
+      - thornbots
+  run:
+    container_name: isaac_ros_jazzy_container

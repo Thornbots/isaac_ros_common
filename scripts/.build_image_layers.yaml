@@ -1,0 +1,14 @@
+# isaac-ros-cli reads this only from $ISAAC_ROS_WS/../scripts/ (setup_workspace.sh
+# links it there) or /etc/isaac-ros-cli/, and it replaces the CLI's copy
+# wholesale, so the stock entries stay. context_overrides are relative to the
+# directory holding each Dockerfile: thornbots builds with src/ as context.
+image_key_order:
+  - isaac_ros.noble.ros2_jazzy.realsense.thornbots
+context_overrides:
+  isaac_ros: ..
+  noble: ..
+  thornbots: ../..
+cache_to_registry_names: []
+cache_from_registry_names:
+  - nvcr.io/nvidia/isaac/ros
+remote_builder: {}
