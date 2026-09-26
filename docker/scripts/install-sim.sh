@@ -31,7 +31,8 @@ pip install --break-system-packages --no-deps trimesh
 # Build as the workspace owner, not root: build/ and install/ are bind-mounted
 # from the host, and root-owned files there break the next non-root
 # `colcon build`. --symlink-install is explicit because sudo's env_reset
-# drops the image's COLCON_OPTS.
+# drops the image's COLCON_OPTS. --packages-up-to, since a fresh workspace has
+# not built sim's dependency dji_serial_bridge yet.
 OWNER_UID=$(stat -c %u "${WS}")
 sudo -u "#${OWNER_UID}" bash -c "source '${ROS_SETUP}' \
-    && cd '${WS}' && colcon build --symlink-install ${COLCON_OPTS} --packages-select sim"
+    && cd '${WS}' && colcon build --symlink-install ${COLCON_OPTS} --packages-up-to sim"
