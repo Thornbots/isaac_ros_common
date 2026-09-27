@@ -2,8 +2,9 @@
 
 **Branch `jazzy`**: upstream
 [NVIDIA-ISAAC-ROS/isaac_ros_common](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common)
-`release-4.6` with our container files on top. `release-3.2` stays the
-Humble branch until the cutover (`../JAZZY_PLAN.md` step 6). Upstream's
+`release-4.6` with our container files on top; the workspace tracks it.
+`humble` holds the Humble tree (from `release-3.2`), frozen since
+2026-09-27. Upstream's
 top-level ROS packages (`isaac_ros_test`, the `*_interfaces`, …) are theirs
 and we don't build them.
 
@@ -50,9 +51,9 @@ with no rebuild; `docker/` edits need one.
 - Then, per workspace, `scripts/setup_workspace.sh`, and run the CLI with
   `ISAAC_ROS_WS` set to that workspace. The laptop's `~/.zshrc` exports the
   Humble one.
-- During the migration the Jazzy workspace is `~/workspaces/isaac_ros-jazzy`
-  and its container `isaac_ros_jazzy_container`, beside the Humble
-  `isaac_ros_dev-x86_64-container`. The scripts read the name from
+- On the laptop the Jazzy workspace is `~/workspaces/isaac_ros-jazzy` and
+  its container `isaac_ros_jazzy_container`. `~/workspaces/isaac_ros-dev`
+  and `isaac_ros_dev-x86_64-container` are the frozen Humble ones. The scripts read the name from
   `.isaac-ros-cli/config.yaml`; `ISAAC_ROS_CONTAINER` overrides.
 
 ## Scope
