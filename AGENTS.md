@@ -66,7 +66,7 @@ with no rebuild; `docker/` edits need one.
 
 - **Layer count on aarch64 is unmeasured.** The Humble image hit 127 of
   overlay2's ~128 on the robot. The Jazzy image is 42 on x86_64 (8 of them
-  ours); count it on `ts-nano-dev` once it's reachable (JAZZY_PLAN.md step 2).
+  ours); count it on `ts-nano-dev` (JAZZY_PLAN.md step 1).
 - **The CLI mounts the host's `~/.bashrc` and `~/.profile` read-only** into
   `/home/admin`, so container shells source them. The laptop's `.profile`
   sources `~/.cargo/env`, which prints a harmless error on every
