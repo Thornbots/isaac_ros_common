@@ -38,13 +38,9 @@ file rather than editing an upstream one where you have the choice.
 
 ## Open
 
-- **Jazzy removes most of this repo upstream.** Isaac ROS 4.x's
-  `isaac_ros_common` has no `docker/` or `scripts/`; the Dockerfiles and
-  `run_dev` moved to the `isaac-ros-cli` apt package. The Jazzy move puts our
-  files on a `jazzy` branch cut from upstream `release-4.6`, and drops
-  `run_dev.sh`, `build_image_layers.sh` and the upstream Dockerfiles. Plan:
-  `../JAZZY_PLAN.md` step 2. Until the cutover, `release-3.2` stays the
-  branch to commit to.
+- **Jazzy:** the `jazzy` branch is upstream `release-4.6` with our container
+  files on top, driven by `isaac-ros-cli`; its `AGENTS.md` has the state.
+  Until the cutover, `release-3.2` stays the branch to commit Humble work to.
 
 - **A full `colcon build` on the robots takes far too long.** Building all the
   packages on the Orin is minutes of wall clock every time, and the compile
