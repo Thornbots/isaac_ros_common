@@ -1,6 +1,6 @@
 # isaac_ros_common: agent notes
 
-**Branch `jazzy`**: upstream
+**Branch `main`**: upstream
 [NVIDIA-ISAAC-ROS/isaac_ros_common](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common)
 `release-4.6` with our container files on top; the workspace tracks it.
 `humble` holds the Humble tree (from `release-3.2`), frozen since
