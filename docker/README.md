@@ -154,8 +154,8 @@ colima start --vm-type vz --cpu 10 --memory 24 --disk 120
 # add "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"] to ~/.docker/config.json
 cd <workspace>/src
 docker buildx build --load -t thornbots-mac -f isaac_ros_common/docker/Dockerfile.mac .
-docker run -d --name isaac_ros_jazzy_container --shm-size=2g -p 127.0.0.1:5901:5901 \
-    -v <workspace>:/workspaces/isaac_ros-dev thornbots-mac
+docker run -d --name isaac_ros_jazzy_container --restart unless-stopped --shm-size=2g \
+    -p 127.0.0.1:5901:5901 -v <workspace>:/workspaces/isaac_ros-dev thornbots-mac
 ```
 
 The workspace is the directory holding `src/`: mount the git checkout, not
@@ -170,6 +170,17 @@ colcon build --symlink-install --base-paths src/sim src/thornbots_pkg \
     src/sllidar_ros2 src/Realsense_ROI_Depth_Rectifier
 source install/setup.bash
 ros2 launch sim localization_tests.launch.py
+```
+
+To keep it up and share Foxglove over the tailnet, run the keepalive in tmux
+on the Mac. It restarts colima when docker stops answering (the VM has frozen
+before), starts the container if it stopped, and tunnels
+`<Mac tailscale IP>:8765` to whatever Foxglove bridge the container runs
+(`sim.launch.py` and every test launch start one):
+
+```sh
+tmux new -d -s keepalive isaac_ros_common/scripts/mac-keepalive.sh
+tmux attach -t keepalive   # its log; Ctrl-b d to detach
 ```
 
 `--base-paths` leaves out `realsense-yolov8-nitros-bridge` (it needs Isaac
