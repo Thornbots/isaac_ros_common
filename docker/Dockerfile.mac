@@ -43,7 +43,7 @@ RUN { echo "export ROS_DOMAIN_ID=1"; \
       echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"; \
       echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"; \
       echo "source /opt/ros/jazzy/setup.bash"; \
-      echo "[ -f /workspaces/isaac_ros-dev/install/setup.bash ] && source /workspaces/isaac_ros-dev/install/setup.bash"; \
+      echo "[ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash"; \
     } >> /etc/bash.bashrc
 
 COPY isaac_ros_common/docker/scripts/mac-desktop.sh /usr/local/bin/mac-desktop.sh

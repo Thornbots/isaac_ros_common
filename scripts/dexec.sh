@@ -38,9 +38,7 @@
 #             later (see that script for why this matters)
 #   -w DIR    override workdir (default /workspaces/isaac_ros-dev)
 #
-# Container name: $ISAAC_ROS_CONTAINER, else docker.run.container_name from
-# ../.isaac-ros-cli/config.yaml (the one `isaac-ros activate` starts), else
-# the CLI's default isaac_ros_dev_container.
+# Container name and user: see container.sh.
 #
 # Examples:
 #   ./dexec.sh -- ros2 topic list
@@ -48,10 +46,8 @@
 #   ./dexec.sh -r -- apt-get install -y ros-jazzy-foo
 set -euo pipefail
 
-CONFIG="$(dirname "$(realpath "$0")")/../.isaac-ros-cli/config.yaml"
-CONTAINER="${ISAAC_ROS_CONTAINER:-$(sed -n "s/^ *container_name: *['\"]\{0,1\}\([^'\" #]*\).*/\1/p" "$CONFIG" 2>/dev/null || true)}"
-CONTAINER="${CONTAINER:-isaac_ros_dev_container}"
-USERNAME="admin"
+source "$(dirname "$(realpath "$0")")/container.sh"
+USERNAME="$CONTAINER_USER"
 WORKDIR="/workspaces/isaac_ros-dev"
 DETACH=0
 
@@ -85,6 +81,7 @@ fi
 if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
     echo "dexec.sh: container '$CONTAINER' is not running." >&2
     echo "  Ask the user to start it:  isaac-ros activate  (with ISAAC_ROS_WS set)" >&2
+    echo "  (on a Mac: the docker run in isaac_ros_common/docker/README.md)" >&2
     echo "  (or set ISAAC_ROS_CONTAINER if the name differs)" >&2
     exit 1
 fi
@@ -116,9 +113,9 @@ CMD="$(printf '%q ' "$@")"
 # to the output of every command, so host-side captures like
 # `X=$(dexec.sh -- ros2 pkg prefix foo)` come back with banner text glued
 # onto the value. Verified 2026-07-26.
-# The workspace install is optional: a fresh workspace has none until its
-# first colcon build.
-SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && source /workspaces/ros2_ws/install/setup.bash && { [ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash ; } ; } >/dev/null"
+# Both workspace installs are optional: a fresh workspace has none until its
+# first colcon build, and the Mac image has no ros2_ws.
+SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && { [ ! -f /workspaces/ros2_ws/install/setup.bash ] || source /workspaces/ros2_ws/install/setup.bash ; } && { [ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash ; } ; } >/dev/null"
 
 if [ "$DETACH" -eq 1 ]; then
     # $$ is the HOST shell's pid, expanded here before the string is sent

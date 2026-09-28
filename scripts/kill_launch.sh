@@ -24,14 +24,10 @@
 # running, with a "Sending SIGINT..." message that looks like it worked --
 # reproduced 2026-07-26. Hence the pid==pgid check below.
 #
-# Container name: $ISAAC_ROS_CONTAINER, else docker.run.container_name from
-# ../.isaac-ros-cli/config.yaml (the one `isaac-ros activate` starts), else
-# the CLI's default isaac_ros_dev_container.
+# Container name and user: see container.sh.
 set -euo pipefail
 
-CONFIG="$(dirname "$(realpath "$0")")/../.isaac-ros-cli/config.yaml"
-CONTAINER="${ISAAC_ROS_CONTAINER:-$(sed -n "s/^ *container_name: *['\"]\{0,1\}\([^'\" #]*\).*/\1/p" "$CONFIG" 2>/dev/null || true)}"
-CONTAINER="${CONTAINER:-isaac_ros_dev_container}"
+source "$(dirname "$(realpath "$0")")/container.sh"
 FORCE=0
 LIST=0
 
@@ -67,7 +63,7 @@ LIST_CMD="ps -eo pid,pgid,sid,ppid,etime,cmd --sort=pid \
     | grep -v 'ps -eo pid,pgid'"
 
 if [ "$LIST" -eq 1 ]; then
-    docker exec -u admin "$CONTAINER" bash -c "$LIST_CMD"
+    docker exec -u "$CONTAINER_USER" "$CONTAINER" bash -c "$LIST_CMD"
     exit 0
 fi
 
@@ -87,10 +83,10 @@ if ! [[ "$LAUNCH_PID" =~ ^[0-9]+$ ]]; then
     exit 2
 fi
 
-# -u admin + bash -c matters here, not just cosmetic: `docker exec
+# -u $CONTAINER_USER + bash -c matters here, not just cosmetic: `docker exec
 # CONTAINER kill -SIGINT -PGID` as raw argv (no shell, no -u) was found to
 # silently fail to deliver the signal in testing, even though it looked
-# like it ran; going through bash -c as the admin user (matching how the
+# like it ran; going through bash -c as the container's user (matching how the
 # target process itself was started) is the form actually verified to
 # work.
 #
@@ -98,7 +94,7 @@ fi
 # exits nonzero, which aborted the whole script at this assignment and made
 # the friendly message below unreachable -- a bogus PID exited 1 with no
 # output at all. Verified 2026-07-26.
-read -r PGID SID <<<"$(docker exec -u admin "$CONTAINER" \
+read -r PGID SID <<<"$(docker exec -u "$CONTAINER_USER" "$CONTAINER" \
     bash -c "ps -o pgid=,sid= -p $LAUNCH_PID" 2>/dev/null | tr -s ' ' || true)"
 if [ -z "${PGID:-}" ]; then
     echo "kill_launch.sh: no such PID $LAUNCH_PID in $CONTAINER" >&2
@@ -117,4 +113,4 @@ if [ "$FORCE" -eq 0 ] && { [ "$PGID" != "$LAUNCH_PID" ] || [ "${SID:-}" != "$LAU
 fi
 
 echo "Sending SIGINT to process group $PGID (from launch PID $LAUNCH_PID)..."
-docker exec -u admin "$CONTAINER" bash -c "kill -SIGINT -$PGID"
+docker exec -u "$CONTAINER_USER" "$CONTAINER" bash -c "kill -SIGINT -$PGID"
