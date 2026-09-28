@@ -172,15 +172,19 @@ source install/setup.bash
 ros2 launch sim localization_tests.launch.py
 ```
 
-To keep it up and share Foxglove over the tailnet, run the keepalive in tmux
-on the Mac. It restarts colima when docker stops answering, starts the container if it stopped, and tunnels
-`<Mac tailscale IP>:8765` to whatever Foxglove bridge the container runs
-(`sim.launch.py` and every test launch start one):
+colima forwards the VM's docker socket to the Mac over one unsupervised ssh
+connection; when it drops, `docker` on the Mac just stops answering. The
+keepalive replaces it with supervised ssh loops in a tmux session, and also
+shares Foxglove (port 8765, which `sim.launch.py` and every test launch
+serve) on the Mac's tailscale IP:
 
 ```sh
-tmux new -d -s keepalive isaac_ros_common/scripts/mac-keepalive.sh
-tmux attach -t keepalive   # its log; Ctrl-b d to detach
+isaac_ros_common/scripts/mac-keepalive.sh   # (re)creates tmux session keepalive
+tmux attach -t keepalive                    # windows docker, foxglove, watch
 ```
+
+`watch` restarts the container if it stopped and colima if the VM stops
+answering ssh.
 
 `--base-paths` leaves out `realsense-yolov8-nitros-bridge` (it needs Isaac
 ROS) and `isaac_ros_common`'s upstream packages. `Dockerfile.mac.dockerignore`
