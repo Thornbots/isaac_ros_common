@@ -137,3 +137,39 @@ The other four (`sllidar_ros2`, `rf2o_laser_odometry`, `sentry_localization`,
 `thornbots_pkg`) match. `rf2o_laser_odometry` is a Thornbots fork: upstream
 caches the lidar-to-base transform at startup, which breaks on our panning
 head (see `sentry_localization/README.md`).
+
+# `Dockerfile.mac`
+
+An arm64 image for Apple Silicon Macs without Isaac ROS, CUDA or YOLO. It
+runs `sim`, localization and the aiming and estimation benches. It holds
+dependencies only: bind-mount the workspace and build inside the container.
+gz and rviz render on Mesa llvmpipe (Docker on macOS passes no GPU) into a
+VNC desktop.
+
+On the Mac, with Homebrew:
+
+```sh
+brew install colima docker docker-buildx
+colima start --vm-type vz --cpu 10 --memory 24 --disk 120
+# add "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"] to ~/.docker/config.json
+cd <workspace>/src
+docker buildx build --load -t thornbots-mac -f isaac_ros_common/docker/Dockerfile.mac .
+docker run -d --name thornbots_mac --shm-size=2g -p 127.0.0.1:5901:5901 \
+    -v <workspace>:/workspaces/isaac_ros-dev thornbots-mac
+```
+
+The workspace is the directory holding `src/`. Open `vnc://localhost:5901`
+in Finder (Cmd-K), password `thornbots`, to see the desktop. Then:
+
+```sh
+docker exec -it thornbots_mac bash
+colcon build --symlink-install --base-paths src/sim src/thornbots_pkg \
+    src/sentry_localization src/rf2o_laser_odometry src/ros2_dji_serial_bridge \
+    src/sllidar_ros2 src/Realsense_ROI_Depth_Rectifier
+source install/setup.bash
+ros2 launch sim localization_tests.launch.py
+```
+
+`--base-paths` leaves out `realsense-yolov8-nitros-bridge` (it needs Isaac
+ROS) and `isaac_ros_common`'s upstream packages. `Dockerfile.mac.dockerignore`
+keeps the YOLO bridge's manifest out of rosdep for the same reason.

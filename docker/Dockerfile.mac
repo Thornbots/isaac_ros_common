@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1.7-labs
+##############################################################################
+# Dockerfile.mac: Jazzy + gz Harmonic for an Apple Silicon Mac, no NVIDIA.
+#
+# Runs sim, localization and the CV benches; not YOLO or anything Isaac ROS.
+# Deps only: bind-mount the workspace at /workspaces/isaac_ros-dev and build
+# there. gz and rviz render on Mesa llvmpipe (no GPU in the VM) into an Xvnc
+# display :1, viewed from macOS Screen Sharing at vnc://localhost:5901.
+# Context is src/, filtered by Dockerfile.mac.dockerignore. See README.md.
+##############################################################################
+
+FROM ros:jazzy-ros-base
+
+SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-colcon-common-extensions \
+    python3-pip \
+    libgl1-mesa-dri \
+    mesa-vulkan-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+# Same rosdep call as install-sim.sh, over every manifest the ignore file
+# lets through (no realsense-yolov8-nitros-bridge, no isaac_ros_common).
+COPY --parents */package.xml /tmp/manifests/
+RUN source /opt/ros/jazzy/setup.bash && \
+    apt-get update && \
+    rosdep update --rosdistro jazzy && \
+    rosdep install -y --from-paths /tmp/manifests --ignore-src --rosdistro jazzy && \
+    rm -rf /var/lib/apt/lists/* /tmp/manifests && \
+    pip install --break-system-packages --no-deps trimesh
+
+# The VNC desktop that stands in for a display (mac-desktop.sh).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tigervnc-standalone-server \
+    tigervnc-tools \
+    openbox \
+    && rm -rf /var/lib/apt/lists/*
+ENV DISPLAY=:1
+
+COPY isaac_ros_common/docker/fastdds_cable.xml /etc/fastdds/profile.xml
+RUN { echo "export ROS_DOMAIN_ID=1"; \
+      echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"; \
+      echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"; \
+      echo "source /opt/ros/jazzy/setup.bash"; \
+      echo "[ -f /workspaces/isaac_ros-dev/install/setup.bash ] && source /workspaces/isaac_ros-dev/install/setup.bash"; \
+    } >> /etc/bash.bashrc
+
+COPY isaac_ros_common/docker/scripts/mac-desktop.sh /usr/local/bin/mac-desktop.sh
+
+WORKDIR /workspaces/isaac_ros-dev
+CMD ["/usr/local/bin/mac-desktop.sh"]
