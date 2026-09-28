@@ -154,15 +154,17 @@ colima start --vm-type vz --cpu 10 --memory 24 --disk 120
 # add "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"] to ~/.docker/config.json
 cd <workspace>/src
 docker buildx build --load -t thornbots-mac -f isaac_ros_common/docker/Dockerfile.mac .
-docker run -d --name thornbots_mac --shm-size=2g -p 127.0.0.1:5901:5901 \
+docker run -d --name isaac_ros_jazzy_container --shm-size=2g -p 127.0.0.1:5901:5901 \
     -v <workspace>:/workspaces/isaac_ros-dev thornbots-mac
 ```
 
-The workspace is the directory holding `src/`. Open `vnc://localhost:5901`
+The workspace is the directory holding `src/`: mount the git checkout, not
+a copy, or edits never reach the container. The name matches
+`.isaac-ros-cli/config.yaml`, so `dexec.sh` and friends find it. Open `vnc://localhost:5901`
 in Finder (Cmd-K), password `thornbots`, to see the desktop. Then:
 
 ```sh
-docker exec -it thornbots_mac bash
+docker exec -it isaac_ros_jazzy_container bash
 colcon build --symlink-install --base-paths src/sim src/thornbots_pkg \
     src/sentry_localization src/rf2o_laser_odometry src/ros2_dji_serial_bridge \
     src/sllidar_ros2 src/Realsense_ROI_Depth_Rectifier
