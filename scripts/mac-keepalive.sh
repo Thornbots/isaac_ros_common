@@ -1,6 +1,6 @@
 #!/bin/bash
 # mac-keepalive.sh: run on the Mac host, in tmux. Every 30s it restarts
-# colima if docker stops answering (3 misses: the vz VM has frozen before),
+# colima if docker stops answering (3 misses),
 # docker-starts the existing Mac container if it stopped (never creates one),
 # and keeps an ssh tunnel from <tailscale IP>:8765 into the container's
 # Foxglove bridge, so any launch's bridge is reachable across the tailnet.
@@ -11,6 +11,10 @@ PORT="${FOXGLOVE_PORT:-8765}"
 SSH_CFG="${TMPDIR:-/tmp}/colima_ssh.cfg"
 
 t() { perl -e 'alarm shift; exec @ARGV' "$@"; }  # macOS has no timeout(1)
+# The tunnel's pid, found by its listener. The tunnel must not share colima's
+# ControlMaster (ssh.sock): docker.sock is forwarded over it, and killing a
+# tunnel that had become the master cut docker off (2026-09-28).
+tunnel_pid() { lsof -t -nP -iTCP@"$1":"$PORT" -sTCP:LISTEN -a -c ssh 2>/dev/null; }
 log() { echo "$(date '+%F %T') $*"; }
 
 misses=0
@@ -22,7 +26,7 @@ while true; do
         log "docker not answering ($misses/3)"
         if [ "$misses" -ge 3 ]; then
             log "restarting colima"
-            pkill -f "ssh.*:$PORT:" 2>/dev/null
+            kill $(lsof -t -nP -iTCP:"$PORT" -sTCP:LISTEN -a -c ssh 2>/dev/null) 2>/dev/null
             t 120 colima stop --force; t 600 colima start
             misses=0
         fi
@@ -37,11 +41,16 @@ while true; do
     TS_IP=$(tailscale ip -4 2>/dev/null | head -1)
     IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER" 2>/dev/null)
     FWD="$TS_IP:$PORT:$IP:$PORT"
-    if [ -n "$TS_IP" ] && [ -n "$IP" ] && ! pgrep -f "ssh.*-L $FWD" >/dev/null; then
-        pkill -f "ssh.*:$PORT:" 2>/dev/null
+    # A container IP change means a stale forward: drop it with the listener.
+    if [ -n "$IP" ] && [ "$IP" != "${LAST_IP:-$IP}" ]; then
+        kill $(tunnel_pid "$TS_IP") 2>/dev/null; sleep 1
+    fi
+    LAST_IP=$IP
+    if [ -n "$TS_IP" ] && [ -n "$IP" ] && [ -z "$(tunnel_pid "$TS_IP")" ]; then
         colima ssh-config > "$SSH_CFG" 2>/dev/null
         HOST=$(awk '/^Host /{print $2; exit}' "$SSH_CFG")
-        if ssh -F "$SSH_CFG" -f -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
+        if ssh -F "$SSH_CFG" -f -N -o ControlMaster=no -o ControlPath=none \
+            -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=3 -L "$FWD" "$HOST"; then
             log "foxglove tunnel up: ws://$TS_IP:$PORT"
         else
