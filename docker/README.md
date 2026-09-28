@@ -173,8 +173,7 @@ ros2 launch sim localization_tests.launch.py
 ```
 
 To keep it up and share Foxglove over the tailnet, run the keepalive in tmux
-on the Mac. It restarts colima when docker stops answering (the VM has frozen
-before), starts the container if it stopped, and tunnels
+on the Mac. It restarts colima when docker stops answering, starts the container if it stopped, and tunnels
 `<Mac tailscale IP>:8765` to whatever Foxglove bridge the container runs
 (`sim.launch.py` and every test launch start one):
 
