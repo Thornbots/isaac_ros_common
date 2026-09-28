@@ -20,10 +20,15 @@ source "${ROS_SETUP}"
 # because the CLI's Dockerfile.realsense builds it from source.
 # isaac_ros_common is left out: its upstream packages are unbuilt, and 4.6's
 # isaac_ros_test pulls ~3 GB of CUDA torch through python3-torch-pip-shim.
+# Without Isaac ROS (Dockerfile.mac) the YOLO bridge's isaac_ros_* keys can't
+# resolve either, so it is left out there too.
 apt-get update
+SKIP_DIRS=(isaac_ros_common)
+[ -d /opt/ros/jazzy/share/isaac_ros_nitros_image_type ] \
+    || SKIP_DIRS+=(realsense-yolov8-nitros-bridge)
 PKG_DIRS=()
 for d in "${WS}"/src/*/; do
-    [ "$(basename "$d")" = isaac_ros_common ] || PKG_DIRS+=("$d")
+    [[ " ${SKIP_DIRS[*]} " == *" $(basename "$d") "* ]] || PKG_DIRS+=("$d")
 done
 rosdep install -y --from-paths "${PKG_DIRS[@]}" --ignore-src --rosdistro jazzy \
     --skip-keys "realsense2_camera realsense2_camera_msgs"
