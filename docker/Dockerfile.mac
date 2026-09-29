@@ -4,8 +4,8 @@
 #
 # Runs sim, localization and the CV benches; not YOLO or anything Isaac ROS.
 # Deps only: bind-mount the workspace at /workspaces/isaac_ros-dev and build
-# there. gz and rviz render on Mesa llvmpipe (no GPU in the VM) into an Xvnc
-# display :1, viewed from macOS Screen Sharing at vnc://localhost:5901.
+# there. No display: gz renders its sensors headless on Mesa llvmpipe (no
+# GPU in the VM), and runs are watched in Foxglove (sim's foxglove.launch.py).
 # Context is src/, filtered by Dockerfile.mac.dockerignore. See README.md.
 ##############################################################################
 
@@ -30,14 +30,6 @@ RUN source /opt/ros/jazzy/setup.bash && \
     rm -rf /var/lib/apt/lists/* /tmp/manifests && \
     pip install --break-system-packages --no-deps trimesh
 
-# The VNC desktop that stands in for a display (mac-desktop.sh).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tigervnc-standalone-server \
-    tigervnc-tools \
-    openbox \
-    && rm -rf /var/lib/apt/lists/*
-ENV DISPLAY=:1
-
 COPY isaac_ros_common/docker/fastdds_cable.xml /etc/fastdds/profile.xml
 RUN { echo "export ROS_DOMAIN_ID=1"; \
       echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"; \
@@ -46,7 +38,5 @@ RUN { echo "export ROS_DOMAIN_ID=1"; \
       echo "[ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash"; \
     } >> /etc/bash.bashrc
 
-COPY isaac_ros_common/docker/scripts/mac-desktop.sh /usr/local/bin/mac-desktop.sh
-
 WORKDIR /workspaces/isaac_ros-dev
-CMD ["/usr/local/bin/mac-desktop.sh"]
+CMD ["sleep", "infinity"]
