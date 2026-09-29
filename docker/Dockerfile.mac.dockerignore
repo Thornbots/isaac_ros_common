@@ -3,4 +3,3 @@
 !*/package.xml
 realsense-yolov8-nitros-bridge/package.xml
 !isaac_ros_common/docker/fastdds_cable.xml
-!isaac_ros_common/docker/scripts/mac-desktop.sh

@@ -21,7 +21,7 @@ starts the container. Our files:
   linked into place by `scripts/setup_workspace.sh`.
 - `scripts/dexec.sh`, `scripts/kill_launch.sh`,
   `scripts/install_isaac_ros_cli.sh`.
-- `docker/Dockerfile.mac` (+ `.dockerignore`, `scripts/mac-desktop.sh`): sim
+- `docker/Dockerfile.mac` (+ `.dockerignore`): sim
   on an Apple Silicon Mac, no Isaac ROS. Standalone; the CLI never builds
   it, so building it on the Mac is fine. `docker/README.md` has the steps.
 

@@ -143,8 +143,9 @@ head (see `sentry_localization/README.md`).
 An arm64 image for Apple Silicon Macs without Isaac ROS, CUDA or YOLO. It
 runs `sim`, localization and the aiming and estimation benches. It holds
 dependencies only: bind-mount the workspace and build inside the container.
-gz and rviz render on Mesa llvmpipe (Docker on macOS passes no GPU) into a
-VNC desktop.
+It has no display: gz renders its sensors headless on Mesa llvmpipe (Docker
+on macOS passes no GPU), the benches skip the gz and rviz windows, and you
+watch a run in Foxglove, below.
 
 On the Mac, with Homebrew:
 
@@ -155,13 +156,12 @@ colima start --vm-type vz --cpu 10 --memory 24 --disk 120
 cd <workspace>/src
 docker buildx build --load -t thornbots-mac -f isaac_ros_common/docker/Dockerfile.mac .
 docker run -d --name isaac_ros_jazzy_container --restart unless-stopped --shm-size=2g \
-    -p 127.0.0.1:5901:5901 -v <workspace>:/workspaces/isaac_ros-dev thornbots-mac
+    -v <workspace>:/workspaces/isaac_ros-dev thornbots-mac
 ```
 
 The workspace is the directory holding `src/`: mount the git checkout, not
 a copy, or edits never reach the container. The name matches
-`.isaac-ros-cli/config.yaml`, so `dexec.sh` and friends find it. Open `vnc://localhost:5901`
-in Finder (Cmd-K), password `thornbots`, to see the desktop. Then:
+`.isaac-ros-cli/config.yaml`, so `dexec.sh` and friends find it. Then:
 
 ```sh
 docker exec -it isaac_ros_jazzy_container bash
