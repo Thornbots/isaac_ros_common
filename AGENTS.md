@@ -24,6 +24,9 @@ starts the container. Our files:
 - `docker/Dockerfile.mac` (+ `.dockerignore`): sim
   on an Apple Silicon Mac, no Isaac ROS. Standalone; the CLI never builds
   it, so building it on the Mac is fine. `docker/README.md` has the steps.
+- `macos/`: the workspace natively on the Mac from RoboStack (pixi), gz and
+  rviz windows on its screen. `macos/README.md` has the steps and what
+  differs from Linux.
 
 **Read [`.claude/skills/isaac-ros-docker`](../.claude/skills/isaac-ros-docker/)
 before running anything here.** Agents never run `isaac-ros activate` in any
