@@ -45,7 +45,8 @@ with no rebuild; `docker/` edits need one.
 - Ubuntu hosts: the `isaac-ros-cli` apt package (`release-4`, `noble`;
   `noble-jetpack` on Jetson), then `sudo isaac-ros init docker`. The
   robots get it, and the rest of their host setup, from
-  `scripts/jetson_setup.sh`.
+  `scripts/jetson_setup.sh`; `scripts/jetson_trim.sh` then makes them
+  headless.
 - **A cold `--build-local` rebuilds every layer.** The CLI skips a layer
   only when `docker manifest inspect` finds its tag in a registry, so
   `docker load`ing another machine's layers skips nothing, and loaded
