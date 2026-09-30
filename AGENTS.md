@@ -42,8 +42,14 @@ with no rebuild; `docker/` edits need one.
 
 ## Host setup
 
-- Ubuntu hosts and the robots: the `isaac-ros-cli` apt package
-  (`release-4`, `noble`), then `sudo isaac-ros init docker`.
+- Ubuntu hosts: the `isaac-ros-cli` apt package (`release-4`, `noble`;
+  `noble-jetpack` on Jetson), then `sudo isaac-ros init docker`. The
+  robots get it, and the rest of their host setup, from
+  `scripts/jetson_setup.sh`.
+- **A cold `--build-local` rebuilds every layer.** The CLI skips a layer
+  only when `docker manifest inspect` finds its tag in a registry, so
+  `docker load`ing another machine's layers skips nothing, and loaded
+  images carry no BuildKit cache (ts-nano-sentry, 2026-09-30).
 - The Arch laptop has no apt: `scripts/install_isaac_ros_cli.sh` installs
   release-4.6 under `~/.local/share/isaac-ros-cli` with no root, and
   `~/.local/bin/isaac-ros` runs it.
@@ -74,9 +80,6 @@ with no rebuild; `docker/` edits need one.
 
 ## Open
 
-- **Layer count on aarch64 is unmeasured.** The Humble image hit 127 of
-  overlay2's ~128 on the robot. The Jazzy image is 42 on x86_64 (8 of them
-  ours); count it on `ts-nano-dev` (JAZZY_PLAN.md step 1).
 - **The CLI mounts the host's `~/.bashrc` and `~/.profile` read-only** into
   `/home/admin`, so container shells source them. The laptop's `.profile`
   sources `~/.cargo/env`, which prints a harmless error on every
@@ -86,7 +89,9 @@ with no rebuild; `docker/` edits need one.
   `~/.ssh`, `~/.aws`, `~/.cache`) on apt installs. The laptop's user install
   has no such file. Decide on the robots whether to ship an empty
   `scripts/.isaac_ros_dev-dockerargs`, which replaces it.
-- **The rplidar udev rule is installed but untested** in a container.
+- **The rplidar udev rule is installed but untested** in a container. On
+  the host, `jetson_setup.sh` installs sllidar_ros2's rule (`/dev/rplidar`,
+  0666).
 - **Full `colcon build` on the robots is slow.** Ideas: ccache in the image,
   `--packages-up-to` instead of whole-workspace builds, capping workers on
   the Orin, shipping more prebuilt in the image. Re-time on JetPack 7.2

@@ -102,7 +102,16 @@ command -v jtop >/dev/null || pip3 install -q --break-system-packages -U jetson-
 log "RealSense udev rules (image builds librealsense v2.56.3, RSUSB)"
 curl -fsSL -o /etc/udev/rules.d/99-realsense-libusb.rules \
     https://raw.githubusercontent.com/realsenseai/librealsense/v2.56.3/config/99-realsense-libusb.rules
+
+log "RPLIDAR udev rule: /dev/rplidar, mode 0666 (sllidar_ros2's host rule)"
+RULE="$(dirname "$(readlink -f "$0")")/../../sllidar_ros2/scripts/rplidar.rules"
+if [ -f "$RULE" ]; then
+    install -m 644 "$RULE" /etc/udev/rules.d/rplidar.rules
+else
+    echo "warning: $RULE not found; clone the workspace and re-run" >&2
+fi
 udevadm control --reload-rules
+udevadm trigger --subsystem-match=tty --subsystem-match=usb --action=add
 
 log "user: git-lfs, shell env"
 sudo -u "$U" git lfs install --skip-repo
