@@ -1,0 +1,52 @@
+# The workspace natively on an Apple Silicon Mac, from RoboStack: sim, the
+# benches and their gz and rviz windows on the Mac's screen. No Isaac ROS,
+# CUDA or YOLO. See README.md.
+[workspace]
+name = "thornbots-macos"
+channels = ["robostack-jazzy", "conda-forge"]
+platforms = ["osx-arm64"]
+
+[dependencies]
+python = "3.12.*"
+ros-jazzy-desktop = "*"
+ros-jazzy-ros-gz = "*"
+ros-jazzy-gz-sim-vendor = "*"
+ros-jazzy-foxglove-bridge = "*"
+ros-jazzy-xacro = "*"
+ros-jazzy-robot-state-publisher = "*"
+ros-jazzy-nav2-amcl = "*"
+ros-jazzy-nav2-lifecycle-manager = "*"
+ros-jazzy-nav2-map-server = "*"
+ros-jazzy-robot-localization = "*"
+ros-jazzy-slam-toolbox = "*"
+ros-jazzy-realsense2-camera-msgs = "*"
+ros-jazzy-vision-msgs = "*"
+ros-jazzy-ament-cmake-pytest = "*"
+ros-jazzy-ament-lint-auto = "*"
+ros-jazzy-ament-lint-common = "*"
+ros-jazzy-eigen3-cmake-module = "*"
+ros-jazzy-tf2-geometry-msgs = "*"
+colcon-common-extensions = "*"
+compilers = "*"
+cmake = "*"
+ninja = "*"
+pkg-config = "*"
+eigen = "*"
+numpy = "<2"
+pytest = "<8"
+setuptools = "<80"
+
+[activation.env]
+# Drop libraries a program never uses. Without it every C++ node links the
+# message packages' Python bindings, whose PyExc_*/Py*_Type data symbols
+# macOS binds at load, and aborts before main.
+LDFLAGS = "-Wl,-dead_strip_dylibs"
+# Fast DDS's shared-memory transport paces the benches at ~1.7x here, against
+# ~20x on UDP loopback (estimation bench, 2026-09-30).
+FASTDDS_BUILTIN_TRANSPORTS = "UDPv4"
+# python/sitecustomize.py puts DYLD_LIBRARY_PATH back in Python nodes.
+PYTHONPATH = "$PIXI_PROJECT_ROOT/python"
+
+[tasks]
+# sllidar_ros2 is Linux-only and sim never starts it.
+build = { cmd = "colcon build --base-paths ../.. --symlink-install --packages-up-to sim thornbots_pkg sentry_localization --packages-ignore sllidar_ros2 --cmake-args -DBUILD_TESTING=OFF -G Ninja", cwd = "." }
