@@ -27,6 +27,9 @@ starts the container. Our files:
 - `macos/`: the workspace natively on the Mac from RoboStack (pixi), gz and
   rviz windows on its screen. `macos/README.md` has the steps and what
   differs from Linux.
+  Nobody has seen those windows rendered yet: on 2026-09-30 macOS listed
+  rviz2 and the gz GUI as open apps, but the display was asleep and
+  `screencapture` came back black.
 
 **Read [`.claude/skills/isaac-ros-docker`](../.claude/skills/isaac-ros-docker/)
 before running anything here.** Agents never run `isaac-ros activate` in any
