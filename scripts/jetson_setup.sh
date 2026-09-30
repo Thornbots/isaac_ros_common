@@ -1,7 +1,8 @@
 #!/bin/bash
 # jetson_setup.sh: host setup for an Orin Nano on JetPack 7.2.1 (L4T R39.2.1),
 # run once after the USB installer and oem-config. Covers JAZZY_FLASH.md
-# section 6 plus the robot-specific host settings. Run as the robot user:
+# section 6, isaac-ros-cli included, plus the robot-specific host settings.
+# Run as the robot user:
 #   sudo ./jetson_setup.sh
 # It replaces and restarts Docker, so it refuses to run while a build or
 # container is up (--force overrides). Reboot afterwards.
@@ -57,6 +58,15 @@ systemctl enable --now containerd docker.socket docker
 log "docker: nvidia as default runtime"
 nvidia-ctk runtime configure --runtime=docker --set-as-default
 
+log "isaac-ros-cli (release-4, noble-jetpack on Jetson)"
+K=/usr/share/keyrings/nvidia-isaac-ros.gpg
+[ -s "$K" ] || curl -fsSL https://isaac.download.nvidia.com/isaac-ros/repos.key | gpg --dearmor -o "$K"
+echo "deb [signed-by=$K] https://isaac.download.nvidia.com/isaac-ros/release-4 noble-jetpack main" \
+    > /etc/apt/sources.list.d/nvidia-isaac-ros.list
+apt-get update -q
+apt-get install -y -q isaac-ros-cli
+isaac-ros init docker
+
 log "groups: docker, dialout (ttyTHS1 serial bridge)"
 usermod -aG docker,dialout "$U"
 systemctl disable --now nvgetty.service 2>/dev/null || true  # absent on R39
@@ -69,9 +79,7 @@ if ! grep -q 'usbcore.autosuspend=-1' "$X"; then
 fi
 echo -1 > /sys/module/usbcore/parameters/autosuspend
 
-log "power mode MAXN_SUPER, clocks locked at boot"
-ID=$(sed -n 's/^< POWER_MODEL ID=\([0-9]*\) NAME=MAXN_SUPER >/\1/p' /etc/nvpmodel.conf)
-[ -n "$ID" ] && { nvpmodel -m "$ID" <<< NO || echo "warning: nvpmodel -m $ID failed" >&2; }
+log "clocks locked at boot (MAXN_SUPER is set last: it reboots)"
 cat > /etc/systemd/system/jetson_clocks.service <<'EOF'
 [Unit]
 Description=Lock Jetson clocks at maximum frequency
@@ -109,6 +117,11 @@ tailscale status >/dev/null 2>&1 || echo "run: sudo tailscale up --ssh --hostnam
 log "restarting docker"
 systemctl restart docker
 
-log "done; reboot to apply groups, kernel args and the GPU fix"
-nvpmodel -q 2>/dev/null | head -1
 docker info 2>/dev/null | grep -E 'Default Runtime' || true
+
+# nvpmodel drops the change unless you let it reboot (answering the prompt
+# NO left 25W on 2026-09-30), so --force: it reboots now if the mode differs.
+ID=$(sed -n 's/^< POWER_MODEL ID=\([0-9]*\) NAME=MAXN_SUPER >/\1/p' /etc/nvpmodel.conf)
+log "done; power mode MAXN_SUPER (reboots if it isn't already)"
+[ -n "$ID" ] && nvpmodel -m "$ID" --force
+echo "reboot to apply groups, kernel args and the GPU fix"
