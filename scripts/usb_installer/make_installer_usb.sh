@@ -9,7 +9,8 @@
 # TS_AUTHKEY (default ~/.config/thornbots/tailscale-authkey: an auth key or
 # an OAuth client secret for tag:jetsons; without one, join by hand),
 # SSH_PUBKEY (default ~/.ssh/id_ed25519.pub), WIFI_SSID (default RHIT-OPEN),
-# XORRISO (default xorriso). --dev writes and verifies the stick.
+# XORRISO (default xorriso). --dev writes and verifies the stick: /dev/sdX on
+# Linux, /dev/diskN on macOS (brew install xorriso).
 # see README.md for design rationale
 set -euo pipefail
 ROBOT="" ISO="" OUT="" DEV=""
@@ -38,9 +39,9 @@ W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 "$XORRISO" -osirrox on -indev "$ISO" -extract /boot/grub/grub.cfg "$W/grub.cfg" 2>/dev/null
 chmod u+w "$W/grub.cfg"
 grep -q 'menuentry "Install on NVMe"' "$W/grub.cfg" || { echo "no NVMe entry in $ISO" >&2; exit 1; }
-sed -i -e 's/^set default=0$/set default="0>0"/' -e 's/^set timeout=-1$/set timeout=1/' \
+sed -e 's/^set default=0$/set default="0>0"/' -e 's/^set timeout=-1$/set timeout=1/' \
     -e '/force-bootdisk=nvme0n1/s|autoinstall |autoinstall nooemconfig oem-iso-cfg set-hd-boot-1st |' \
-    "$W/grub.cfg"
+    "$W/grub.cfg" > "$W/grub.new" && mv "$W/grub.new" "$W/grub.cfg"
 grep -q 'nooemconfig oem-iso-cfg' "$W/grub.cfg" && grep -q 'default="0>0"' "$W/grub.cfg"
 
 # ── /oemdata: the in-target script, first-boot stage, and this robot's settings
@@ -64,10 +65,25 @@ rm -f "$OUT"
 echo "wrote $OUT ($(du -h "$OUT" | cut -f1)) for ts-nano-$ROBOT"
 
 if [ -n "$DEV" ]; then
-    [ "$(lsblk -dno TRAN "$DEV")" = usb ] || { echo "$DEV is not a USB disk; refusing" >&2; exit 1; }
-    lsblk -dpo NAME,SIZE,MODEL,TRAN "$DEV"
+    if [ "$(uname)" = Darwin ]; then
+        info=$(diskutil info "$DEV")
+        grep -Eq 'Protocol: +USB' <<<"$info" && grep -Eq 'Device Location: +External' <<<"$info" &&
+            [[ $DEV =~ ^/dev/disk[0-9]+$ ]] || { echo "$DEV is not a whole external USB disk; refusing" >&2; exit 1; }
+        grep -E 'Media Name|Disk Size' <<<"$info"
+        RAW="/dev/r${DEV#/dev/}"; SIZE=$(stat -f%z "$OUT")
+    else
+        [ "$(lsblk -dno TRAN "$DEV")" = usb ] || { echo "$DEV is not a USB disk; refusing" >&2; exit 1; }
+        lsblk -dpo NAME,SIZE,MODEL,TRAN "$DEV"
+        RAW=$DEV; SIZE=$(stat -c%s "$OUT")
+    fi
     read -r -p "Erase $DEV and write the installer? [y/N] " a; [ "$a" = y ] || exit 1
-    for p in $(lsblk -lnpo NAME "$DEV" | tail -n +2); do udisksctl unmount -b "$p" 2>/dev/null || true; done
-    sudo dd if="$OUT" of="$DEV" bs=4M conv=fsync oflag=direct status=progress
-    sudo cmp -n "$(stat -c%s "$OUT")" "$OUT" "$DEV" && echo "stick OK"
+    if [ "$(uname)" = Darwin ]; then
+        diskutil unmountDisk "$DEV"
+        sudo dd if="$OUT" of="$RAW" bs=4m status=progress
+    else
+        for p in $(lsblk -lnpo NAME "$DEV" | tail -n +2); do udisksctl unmount -b "$p" 2>/dev/null || true; done
+        sudo dd if="$OUT" of="$RAW" bs=4M conv=fsync oflag=direct status=progress
+    fi
+    sync
+    sudo cmp -n "$SIZE" "$OUT" "$RAW" && echo "stick OK"
 fi
