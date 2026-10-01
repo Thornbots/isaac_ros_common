@@ -38,6 +38,33 @@ scratch, which takes much longer.
 
 `isaac-ros activate` exits 0 even when the build fails. Read the output.
 
+## Building the robots' image on a Mac
+
+A robot can't build its own image on one battery, so build it on an Apple
+Silicon Mac and ship it. The Orins and the Mac's colima VM are both arm64, so
+it builds natively with no QEMU, and nothing in the build needs a GPU. On
+the Mac, with colima running:
+
+```sh
+src/isaac_ros_common/scripts/build_robot_image.sh ts-nano-sentry ts-nano-hero
+```
+
+It installs the CLI if missing (`install_isaac_ros_cli.sh`), then builds
+through the CLI's own `build_image_layers.py`. The platform is pinned to
+`arm64-jetpack` instead of detected, so the tag matches what `activate`
+computes on a robot from the same checkout: the robots' apt CLI ships the
+same Dockerfiles and apt config byte for byte. The `isaac_ros` layer comes
+from nvcr.io; `realsense` (librealsense with CUDA) and `thornbots` build
+locally, so the first run is slow and later ones hit BuildKit's cache. It
+then pushes to a `registry:2` on the Mac (`thornbots-registry`, port 5055;
+AirPlay holds 5000), and each robot pulls it through `ssh -R` and retags
+it. Only layers the robot lacks cross the link. On the robot, a plain
+`isaac-ros activate` (no `--build-local`) then starts it.
+
+Keep the Mac's checkout at the commit the robots run: the tag hashes only
+the Dockerfiles, so a stale package tree ships under the right name.
+`DRY_RUN=1` prints the tag without building.
+
 ## Build context is `src/`, not `docker/`
 
 `scripts/.build_image_layers.yaml` sets `context_overrides: thornbots: ../..`,
