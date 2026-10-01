@@ -79,6 +79,22 @@ if ! grep -q 'usbcore.autosuspend=-1' "$X"; then
 fi
 echo -1 > /sys/module/usbcore/parameters/autosuspend
 
+# NVIDIA's start script bridges "usb0" for both RNDIS and NCM, but NCM comes
+# up as usb1, so it never joins l4tbr0. macOS speaks only NCM: no link, no
+# 192.168.55.1. Bridge each function by the ifname the gadget reports.
+log "USB device mode: bridge the NCM link too (macOS hosts)"
+cat > /usr/local/sbin/l4t-usb-bridge-all <<'EOF'
+#!/bin/sh
+for f in /sys/kernel/config/usb_gadget/l4t/functions/*/ifname; do
+    i=$(cat "$f")
+    ip link set dev "$i" master l4tbr0 && ip link set dev "$i" up
+done
+EOF
+chmod 755 /usr/local/sbin/l4t-usb-bridge-all
+mkdir -p /etc/systemd/system/nv-l4t-usb-device-mode.service.d
+printf '[Service]\nExecStartPost=/usr/local/sbin/l4t-usb-bridge-all\n' \
+    > /etc/systemd/system/nv-l4t-usb-device-mode.service.d/bridge-ncm.conf
+
 log "clocks locked at boot (MAXN_SUPER is set last: it reboots)"
 cat > /etc/systemd/system/jetson_clocks.service <<'EOF'
 [Unit]
