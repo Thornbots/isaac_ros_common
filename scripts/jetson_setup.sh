@@ -146,7 +146,12 @@ docker info 2>/dev/null | grep -E 'Default Runtime' || true
 
 # nvpmodel drops the change unless you let it reboot (answering the prompt
 # NO left 25W on 2026-09-30), so --force: it reboots now if the mode differs.
+# NO_REBOOT=1 (robot_setup.sh) leaves this step to the caller.
 ID=$(sed -n 's/^< POWER_MODEL ID=\([0-9]*\) NAME=MAXN_SUPER >/\1/p' /etc/nvpmodel.conf)
-log "done; power mode MAXN_SUPER (reboots if it isn't already)"
-[ -n "$ID" ] && nvpmodel -m "$ID" --force
-echo "reboot to apply groups, kernel args and the GPU fix"
+if [ "${NO_REBOOT:-0}" = 1 ]; then
+    log "done; caller sets MAXN_SUPER (ID ${ID:-?}) and reboots"
+else
+    log "done; power mode MAXN_SUPER (reboots if it isn't already)"
+    [ -n "$ID" ] && nvpmodel -m "$ID" --force
+    echo "reboot to apply groups, kernel args and the GPU fix"
+fi

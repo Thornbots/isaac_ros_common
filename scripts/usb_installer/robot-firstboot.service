@@ -1,0 +1,15 @@
+# robot-firstboot.service: finishes a USB-installed robot (robot-firstboot.sh).
+# Enabled by oem-iso-cfg.sh; the script disables it when setup is done.
+[Unit]
+Description=Robot first-boot setup (workspace, host setup, image build)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/robot-firstboot.sh
+TimeoutStartSec=infinity
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
