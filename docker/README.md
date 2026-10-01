@@ -53,9 +53,9 @@ It installs the CLI if missing (`install_isaac_ros_cli.sh`), then builds
 through the CLI's own `build_image_layers.py`. The platform is pinned to
 `arm64-jetpack` instead of detected, so the tag matches what `activate`
 computes on a robot from the same checkout: the robots' apt CLI ships the
-same Dockerfiles and apt config byte for byte. The `isaac_ros` layer comes
-from nvcr.io; `realsense` (librealsense with CUDA) and `thornbots` build
-locally, so the first run is slow and later ones hit BuildKit's cache. It
+same Dockerfiles and apt config byte for byte. Every layer builds locally
+(the CLI's registry check probes names nvcr.io doesn't serve): 26 min cold,
+most of it `realsense`, then BuildKit's cache makes reruns quick. It
 then pushes to a `registry:2` on the Mac (`thornbots-registry`, port 5055;
 AirPlay holds 5000), and each robot pulls it through `ssh -R` and retags
 it. Only layers the robot lacks cross the link. On the robot, a plain
