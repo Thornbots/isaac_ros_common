@@ -18,7 +18,8 @@ link() {  # link <target> <link-path>
         exit 1
     fi
     mkdir -p "$(dirname "$2")"
-    ln -sfnr "$1" "$2"
+    # Relative, like GNU ln -r (BSD ln on the Mac has no -r).
+    ln -sfn "$(python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' "$1" "$2")" "$2"
     echo "  $2 -> $(readlink "$2")"
 }
 
