@@ -20,7 +20,8 @@ starts the container. Our files:
   `scripts/.isaac_ros_common-config`, `scripts/.build_image_layers.yaml`,
   linked into place by `scripts/setup_workspace.sh`.
 - `scripts/dexec.sh`, `scripts/kill_launch.sh`,
-  `scripts/install_isaac_ros_cli.sh`.
+  `scripts/install_isaac_ros_cli.sh`, `scripts/build_robot_image.sh` (the
+  robots' image built on the Mac, `docker/README.md`; the user runs it).
 - `docker/Dockerfile.mac` (+ `.dockerignore`): sim
   on an Apple Silicon Mac, no Isaac ROS. Standalone; the CLI never builds
   it, so building it on the Mac is fine. `docker/README.md` has the steps.
@@ -51,7 +52,7 @@ with no rebuild; `docker/` edits need one.
   only when `docker manifest inspect` finds its tag in a registry, so
   `docker load`ing another machine's layers skips nothing, and loaded
   images carry no BuildKit cache (ts-nano-sentry, 2026-09-30).
-- The Arch laptop has no apt: `scripts/install_isaac_ros_cli.sh` installs
+- The Arch laptop and the Mac have no apt: `scripts/install_isaac_ros_cli.sh` installs
   release-4.6 under `~/.local/share/isaac-ros-cli` with no root, and
   `~/.local/bin/isaac-ros` runs it.
 - **The CLI starts the container with `--gpus all`, which Docker 28+
