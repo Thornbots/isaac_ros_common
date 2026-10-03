@@ -13,7 +13,7 @@ On the host, once per clone, then build and start:
 
 ```bash
 src/isaac_ros_common/scripts/setup_workspace.sh
-export ISAAC_ROS_WS=~/workspaces/isaac_ros-dev   # the workspace holding this src/
+export ISAAC_ROS_WS=~/workspaces/isaac_ros-jazzy   # the workspace holding this src/
 isaac-ros activate --build-local
 ```
 
@@ -79,7 +79,7 @@ build artifacts, `sim/` and everything in `isaac_ros_common/` except
 Building it by hand (the base is the CLI's realsense layer):
 
 ```bash
-cd ~/workspaces/isaac_ros-dev/src
+cd ~/workspaces/isaac_ros-jazzy/src
 docker build -f isaac_ros_common/docker/Dockerfile.thornbots \
     --build-arg BASE_IMAGE=<realsense image> -t thornbots:latest .
 ```
