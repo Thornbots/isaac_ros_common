@@ -21,7 +21,8 @@ starts the container. Our files:
   linked into place by `scripts/setup_workspace.sh`.
 - `scripts/dexec.sh`, `scripts/kill_launch.sh`,
   `scripts/install_isaac_ros_cli.sh`, `scripts/build_robot_image.sh` (the
-  robots' image built on the Mac, `docker/README.md`; the user runs it).
+  robots' image, built on each robot, or on the Mac as a stopgap,
+  `docker/README.md`; the user runs it).
 - `docker/Dockerfile.mac` (+ `.dockerignore`): sim
   on an Apple Silicon Mac, no Isaac ROS. Standalone; the CLI never builds
   it, so building it on the Mac is fine. `docker/README.md` has the steps.
@@ -96,8 +97,10 @@ with no rebuild; `docker/` edits need one.
   0666).
 - **Full `colcon build` on the robots is slow.** Ideas: ccache in the image,
   `--packages-up-to` instead of whole-workspace builds, capping workers on
-  the Orin, shipping more prebuilt in the image. Re-time on JetPack 7.2
-  (JAZZY_PLAN.md step 5).
+  the Orin, shipping more prebuilt in the image. The image's own colcon
+  layer (7 packages) took 172 s on `ts-nano-dev` (2026-10-03, ROADMAP T29);
+  a whole-workspace build on JetPack 7.2 is still untimed (JAZZY_PLAN.md
+  step 5).
 
 ## Committing
 
