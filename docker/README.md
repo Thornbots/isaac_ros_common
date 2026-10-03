@@ -38,12 +38,15 @@ scratch, which takes much longer.
 
 `isaac-ros activate` exits 0 even when the build fails. Read the output.
 
-## Building the robots' image on a Mac
+## Building the robots' image
 
-A robot can't build its own image on one battery, so build it on an Apple
-Silicon Mac and ship it. The Orins and the Mac's colima VM are both arm64, so
-it builds natively with no QEMU, and nothing in the build needs a GPU. On
-the Mac, with colima running:
+Each robot builds its own image, on wall power: run
+`src/isaac_ros_common/scripts/build_robot_image.sh` on it with no host
+arguments (29 min on `ts-nano-dev` with the `isaac_ros` and `realsense`
+layers cached; ROADMAP T29 is cutting that). Building on an Apple Silicon Mac
+and shipping it is a stopgap. The Orins and the Mac's colima VM are both
+arm64, so it builds natively with no QEMU, and nothing in the build needs a
+GPU. On the Mac, with colima running:
 
 ```sh
 src/isaac_ros_common/scripts/build_robot_image.sh ts-nano-sentry ts-nano-hero
