@@ -13,8 +13,8 @@
 # to be set first, and it's easy to forget one of the two workspace
 # sources too. A `docker exec` session that skips this can look completely
 # healthy while missing real config, which caused real debugging pain
-# earlier in this project (see DOCKER.md's "Any docker exec running ROS
-# commands..." note for the full story).
+# earlier in this project (see the isaac-ros-docker skill's reference.md,
+# "The PS1 interactive guard", for the full story).
 #
 # ONE DELIBERATE DIFFERENCE FROM THE USER'S TERMINAL -- package resolution.
 # /etc/bash.bashrc ends by sourcing ONLY /workspaces/ros2_ws/install, so an
@@ -26,8 +26,8 @@
 # ros2_ws at 24. Packages NOT built locally (e.g. sllidar_ros2) still fall
 # through to ros2_ws. Net effect: the same `ros2 launch` can run different
 # code here than in the user's terminal. Always run `ros2 pkg prefix <pkg>`
-# through the SAME entry point you will launch from -- see DOCKER.md's
-# "Two workspaces" section.
+# through the SAME entry point you will launch from -- see the
+# isaac-ros-docker skill's SKILL.md, "Two workspaces".
 #
 # Usage:
 #   dexec.sh [-r] [-d] [-w WORKDIR] -- <command...>

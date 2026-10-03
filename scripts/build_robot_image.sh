@@ -1,6 +1,6 @@
 #!/bin/bash
-# build_robot_image.sh: build the robots' image (arm64-jetpack) on a non-Jetson
-# arm64 host (the Mac's colima VM), then optionally ship it to robots:
+# build_robot_image.sh: build the robots' image (arm64-jetpack) on a robot, or on
+# another arm64 host (the Mac's colima VM, a stopgap), then optionally ship it:
 #   build_robot_image.sh                    # build; prints the tag
 #   build_robot_image.sh ts-nano-sentry ... # build, then push and pull on each robot
 #   DRY_RUN=1 build_robot_image.sh          # print the tag only
