@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-isaac-ros-realsense \
     ros-jazzy-isaac-ros-common \
     ros-jazzy-image-transport-plugins \
+    ros-jazzy-foxglove-bridge \
     && rm -rf /var/lib/apt/lists/*
 
 # gz-sim is not installed: real hardware never launches it. For `sim`, run
