@@ -89,9 +89,9 @@ QEMU, then build and ship:
 SEED_FROM=blaises-mini src/isaac_ros_common/scripts/build_robot_image.sh ts-nano-sentry
 ```
 
-Later runs skip the copy. Untested (2026-10-03): whether `buildx bake`
-picks up `DOCKER_DEFAULT_PLATFORM=linux/arm64`, and how long colcon takes
-under QEMU.
+Later runs skip the copy. The thornbots layer took about 22 min under
+QEMU on 2026-10-03, colcon 10 min of it, and its tag matched the Mac's.
+Shipping from the laptop is untested.
 
 ## Build context is `src/`, not `docker/`
 
