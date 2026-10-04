@@ -1,10 +1,11 @@
 #!/bin/bash
 # jetson_trim.sh: make a robot Orin headless, like NVIDIA's minimal rootfs
 # flavor, after jetson_setup.sh. Boots to multi-user.target, shortens the UEFI
-# (5 s) and L4TLauncher (3 s) menu waits, disables timers and services a robot
-# doesn't use, purges the desktop (jetson_headless_purge.txt) and snapd, and
-# stops dpkg installing docs. Keeps ssh, tailscale, docker, NetworkManager,
-# Wi-Fi firmware and USB device mode (l4tbr0).
+# (5 s) and L4TLauncher (3 s) menu waits, boots the kernel `quiet`, disables
+# timers and services a robot doesn't use, purges the desktop
+# (jetson_headless_purge.txt) and snapd, and stops dpkg installing docs.
+# Keeps ssh, tailscale, docker, NetworkManager, Wi-Fi firmware and USB device
+# mode (l4tbr0).
 #   sudo ./jetson_trim.sh [--dry-run]   # reboot afterwards; --dry-run lists the purge only
 # Undo the desktop: sudo systemctl set-default graphical.target
 # see JAZZY_FLASH.md for design rationale
@@ -21,6 +22,13 @@ systemctl set-default multi-user.target
 log "boot menu waits: UEFI 1 s (ESC still enters setup), L4TLauncher 0.1 s"
 efibootmgr -t 1 >/dev/null
 sed -i 's/^TIMEOUT .*/TIMEOUT 1/' /boot/extlinux/extlinux.conf
+
+# The kernel writes its log to the 115200-baud serial console as it boots;
+# quiet cut kernel start to /init from 4.7 s to 2.3 s on the sentry.
+log "kernel cmdline: quiet"
+if ! grep -qE '^[[:space:]]*APPEND .* quiet( |$)' /boot/extlinux/extlinux.conf; then
+    sed -i '/^[[:space:]]*APPEND /s/$/ quiet/' /boot/extlinux/extlinux.conf
+fi
 
 log "timers: no background apt, firmware, motd or crash-report runs"
 systemctl disable --now apt-daily.timer apt-daily-upgrade.timer man-db.timer \
