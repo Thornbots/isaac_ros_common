@@ -66,7 +66,32 @@ it. Only layers the robot lacks cross the link. On the robot, a plain
 
 Keep the Mac's checkout at the commit the robots run: the tag hashes only
 the Dockerfiles, so a stale package tree ships under the right name.
-`DRY_RUN=1` prints the tag without building.
+`DRY_RUN=1` prints the tag and the base layers' tags without building.
+
+When both base layers (`isaac_ros`, `realsense`) are already tagged on the
+host, only `Dockerfile.thornbots` builds, on top of them (the CLI's
+`leaf_only`). The CLI's own skip asks the registry, which never has them.
+
+### On the x86 laptop
+
+`archlinux` builds the same image under QEMU, then ships it the same way.
+Once per laptop, register arm64 emulation:
+
+```sh
+sudo pacman -S qemu-user-static qemu-user-static-binfmt
+```
+
+Once per base-layer change, copy the base layers from the Mac mini
+(`docker save` over ssh, about 21 GB) so librealsense never builds under
+QEMU, then build and ship:
+
+```sh
+SEED_FROM=blaises-mini src/isaac_ros_common/scripts/build_robot_image.sh ts-nano-sentry
+```
+
+Later runs skip the copy. Untested (2026-10-03): whether `buildx bake`
+picks up `DOCKER_DEFAULT_PLATFORM=linux/arm64`, and how long colcon takes
+under QEMU.
 
 ## Build context is `src/`, not `docker/`
 

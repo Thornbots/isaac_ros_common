@@ -21,7 +21,7 @@ starts the container. Our files:
   linked into place by `scripts/setup_workspace.sh`.
 - `scripts/dexec.sh`, `scripts/kill_launch.sh`,
   `scripts/install_isaac_ros_cli.sh`, `scripts/build_robot_image.sh` (the
-  robots' image, built on each robot, or on the Mac as a stopgap,
+  robots' image, built on a robot, the Mac, or the x86 laptop under QEMU,
   `docker/README.md`; the user runs it).
 - `docker/Dockerfile.mac` (+ `.dockerignore`): sim
   on an Apple Silicon Mac, no Isaac ROS. Standalone; the CLI never builds
