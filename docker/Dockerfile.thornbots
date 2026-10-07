@@ -11,6 +11,8 @@
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 
+LABEL org.opencontainers.image.source="https://github.com/Thornbots/thornbots_workspace"
+
 SHELL ["/bin/bash", "-c"]
 
 # Capped so the Jetson/build host doesn't OOM: -j6 compiler jobs,
