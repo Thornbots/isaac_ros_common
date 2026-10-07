@@ -40,6 +40,37 @@ scratch, which takes much longer.
 
 ## Building the robots' image
 
+### Pulling from GitHub Container Registry
+
+The workspace's `publish robot image` workflow builds the JetPack arm64
+image on GitHub after pushes to `main` and `nightly`. It runs package tests
+before publishing. Each build has an immutable workspace revision tag and a
+branch tag:
+
+```sh
+docker pull ghcr.io/thornbots/isaac-ros:nightly-arm64-jetpack
+```
+
+For `isaac-ros activate`, first update the robot's checkout and its package
+gitlinks, then pull and retag the image for that exact workspace revision:
+
+```sh
+src/isaac_ros_common/scripts/pull_robot_image.sh
+isaac-ros activate
+```
+
+The pull script never starts a container or builds an image. It computes the
+CLI's local tag, pulls `sha-<workspace SHA>-arm64-jetpack`, and retags it.
+Wait for the workflow to finish before pulling a new revision. The image is
+for JetPack robots; it does not include Gazebo or the simulation package.
+
+The workflow uses `GITHUB_TOKEN` with `packages: write`; no registry password
+secret is needed. GitHub initially creates packages as private. An org
+administrator must grant teammates read access or make the package public.
+For private access, authenticate to `ghcr.io` with a token that has
+`read:packages` before pulling. Build/test failure prevents publishing a new
+branch tag. Logs and the workflow summary identify the exact source revision.
+
 Each robot builds its own image, on wall power: run
 `src/isaac_ros_common/scripts/build_robot_image.sh` on it with no host
 arguments (29 min on `ts-nano-dev` with the `isaac_ros` and `realsense`
@@ -152,13 +183,15 @@ Layer 2 runs
 
 ```
 rosdep install -y --from-paths $ROS_WS/src --ignore-src --rosdistro jazzy \
-    --skip-keys "realsense2_camera realsense2_camera_msgs"
+    --skip-keys "realsense2_camera realsense2_camera_msgs librealsense2"
 ```
 
 The CLI's `Dockerfile.realsense` builds `realsense2_camera` from source with
 bloom and strips the `ros-jazzy-librealsense2` dependency so it links against
 the librealsense it built. Letting rosdep resolve those keys from apt could
-pull the stock debs over the custom ones. `--ignore-src` covers the
+pull the stock debs over the custom ones. The same exclusion applies to
+`librealsense2`, now declared as a build dependency by the ROI package.
+`--ignore-src` covers the
 inter-package deps, which resolve because all seven manifests are present.
 
 The Humble image pinned `ros-humble-diagnostic-updater >= 4.0.7` because 4.0.6

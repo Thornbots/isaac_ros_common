@@ -34,7 +34,10 @@ def log_process_all(process: subprocess.Popen, log_file: pathlib.Path) -> list[s
         while process.poll() is None:
             ready, _, _ = select.select([process.stdout], [], [], 0.1)
             if ready:
-                output = process.stdout.readline().strip('\n')
+                raw_output = process.stdout.readline()
+                if not raw_output:
+                    continue
+                output = raw_output.rstrip('\n')
                 full_output.append(output)
                 io_utils.print_gray(output)
                 f.write(output + '\n')
@@ -72,7 +75,10 @@ def log_process_tail(process: subprocess.Popen, log_file: pathlib.Path, tail: in
 
                 io_utils.delete_last_lines_in_stdout(len(tail_output))
 
-                output = process.stdout.readline().strip('\n')
+                raw_output = process.stdout.readline()
+                if not raw_output:
+                    continue
+                output = raw_output.rstrip('\n')
                 tail_output.append(output)
                 full_output.append(output)
 
@@ -109,7 +115,10 @@ def log_process_none(process: subprocess.Popen, log_file: pathlib.Path) -> list[
         while process.poll() is None:
             ready, _, _ = select.select([process.stdout], [], [], 0.1)
             if ready:
-                output = process.stdout.readline().strip('\n')
+                raw_output = process.stdout.readline()
+                if not raw_output:
+                    continue
+                output = raw_output.rstrip('\n')
                 full_output.append(output)
                 f.write(output + '\n')
                 f.flush()

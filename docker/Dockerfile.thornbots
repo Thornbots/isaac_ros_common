@@ -55,7 +55,7 @@ COPY --parents */package.xml ${ROS_WS}/src/
 RUN source ${ROS_SETUP} && \
     apt-get update && \
     rosdep install -y --from-paths ${ROS_WS}/src --ignore-src --rosdistro jazzy \
-        --skip-keys "realsense2_camera realsense2_camera_msgs" \
+        --skip-keys "realsense2_camera realsense2_camera_msgs librealsense2" \
     && rm -rf /var/lib/apt/lists/*
 
 ##############################################################################
