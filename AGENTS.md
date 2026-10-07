@@ -99,8 +99,7 @@ with no rebuild; `docker/` edits need one.
   `--packages-up-to` instead of whole-workspace builds, capping workers on
   the Orin, shipping more prebuilt in the image. The image's own colcon
   layer (7 packages) took 172 s on `ts-nano-dev` (2026-10-03, ROADMAP T29);
-  a whole-workspace build on JetPack 7.2 is still untimed (JAZZY_PLAN.md
-  step 5).
+  a whole-workspace build on JetPack 7.2 is still untimed (JAZZY_FLASH.md#hardware-checklist).
 
 ## Committing
 
