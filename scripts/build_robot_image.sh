@@ -28,7 +28,7 @@ if [ "$arch" = x86_64 ]; then
 elif [ "$arch" != aarch64 ]; then
     echo "docker runs on $arch; this builds on aarch64, or x86_64 under QEMU" >&2; exit 1
 fi
-[ -x "$P/venv/bin/python" ] || bash "$HERE/install_isaac_ros_cli.sh"
+[ -x "$P/venv/bin/python" ] || bash "$HERE/install_isaac_ros_cli.sh" >&2
 bash "$HERE/setup_workspace.sh" >/dev/null
 
 # activate's own config merge, build args and layer order, with the platform

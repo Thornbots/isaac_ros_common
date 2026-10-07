@@ -9,6 +9,7 @@ import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'pull_robot_image.sh'
 CLI_TAG = 'nvcr.io/nvidia/isaac/ros:fixture-arm64-jetpack'
+BUILD_SCRIPT = SCRIPT.with_name('build_robot_image.sh')
 
 
 class PullRobotImageTest(unittest.TestCase):
@@ -101,6 +102,53 @@ class PullRobotImageTest(unittest.TestCase):
         result = self.pull()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(self.docker_log.exists())
+
+
+class BuildRobotImageTest(unittest.TestCase):
+    def test_first_use_dry_run_keeps_installer_diagnostics_off_stdout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            scripts = base / 'ws/src/isaac_ros_common/scripts'
+            scripts.mkdir(parents=True)
+            shutil.copyfile(BUILD_SCRIPT, scripts / BUILD_SCRIPT.name)
+            (scripts / 'setup_workspace.sh').write_text('#!/usr/bin/env bash\nexit 0\n')
+            (scripts / 'install_isaac_ros_cli.sh').write_text(
+                '#!/usr/bin/env bash\nset -euo pipefail\n'
+                'mkdir -p "$ISAAC_ROS_CLI_PREFIX/venv/bin"\n'
+                'cp "$FAKE_CLI_PYTHON" "$ISAAC_ROS_CLI_PREFIX/venv/bin/python"\n'
+                'chmod +x "$ISAAC_ROS_CLI_PREFIX/venv/bin/python"\n'
+                'echo "installed: fixture CLI"\n')
+            prefix_python = base / 'fake-python'
+            base_tag = 'nvcr.io/nvidia/isaac/ros/fixture-base:latest'
+            prefix_python.write_text(
+                '#!/usr/bin/env bash\n'
+                f'printf "%s\\n" "{CLI_TAG}" "{base_tag}"\n')
+            binaries = base / 'bin'
+            binaries.mkdir()
+            docker = binaries / 'docker'
+            docker.write_text(
+                '#!/usr/bin/env bash\n'
+                'printf "%s\\n" "$*" >> "$DOCKER_LOG"\n'
+                'case "$1 $2" in\n'
+                '  "context inspect") echo unix:///fixture/docker.sock ;;\n'
+                '  "info --format") echo aarch64 ;;\n'
+                '  *) echo "Unexpected Docker operation: $*" >&2; exit 99 ;;\n'
+                'esac\n')
+            docker.chmod(0o755)
+            docker_log = base / 'docker.log'
+            prefix = base / 'new-cli-prefix'
+            env = dict(os.environ, DRY_RUN='1', ISAAC_ROS_CLI_PREFIX=str(prefix),
+                       FAKE_CLI_PYTHON=str(prefix_python), DOCKER_HOST='',
+                       DOCKER_LOG=str(docker_log), PATH=f'{binaries}:{os.environ["PATH"]}')
+            self.assertFalse(prefix.exists())
+            result = subprocess.run(['bash', str(scripts / BUILD_SCRIPT.name)],
+                                    env=env, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), [CLI_TAG, base_tag])
+            self.assertIn('installed: fixture CLI', result.stderr)
+            self.assertEqual(docker_log.read_text().splitlines(), [
+                'context inspect -f {{.Endpoints.docker.Host}}',
+                'info --format {{.Architecture}}'])
 
 
 if __name__ == '__main__':
