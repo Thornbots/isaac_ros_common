@@ -81,7 +81,7 @@ RUN cd ${ROS_WS} && \
 #
 # RealSense 60 fps profiles over the stock ones, the DDS profile, the
 # rplidar udev rule, and `dialout` for the container user (serial devices).
-# ROS_DOMAIN_ID is 1 until the Jazzy cutover (JAZZY_PLAN.md).
+# ROS_DOMAIN_ID is 1 until the Jazzy cutover (JAZZY_FLASH.md).
 ##############################################################################
 COPY isaac_ros_common/docker /opt/thornbots/docker
 ARG ROS_DOMAIN_ID=1
