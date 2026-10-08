@@ -107,3 +107,12 @@ This package is a submodule of `thornbots_workspace`. Commit and push here
 first, then bump the gitlink in `../`: one logical change, one bump, never a
 gitlink pointing at an unpushed commit. Full rule in `../CLAUDE.md` §
 Packages.
+
+## CI
+
+GitHub CI runs on PRs targeting main/nightly and pushes to both branches;
+manual runs are available. Shared lint is pinned to workspace `884bfe63ea4e` (tag `ci-tooling-884bfe6`). Existing diagnostics are recorded in
+`.github/quality-baseline.json`; new diagnostics fail. Do not expand the
+baseline to hide regressions. Syntax errors always fail.
+GPU/CUDA builds require the workspace's manual `ROS Jazzy` workflow and a
+provisioned `isaac-ros-jazzy` runner; GitHub-hosted lint still runs on every PR.

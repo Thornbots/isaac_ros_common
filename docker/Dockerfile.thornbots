@@ -11,6 +11,8 @@
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 
+LABEL org.opencontainers.image.source="https://github.com/Thornbots/thornbots_workspace"
+
 SHELL ["/bin/bash", "-c"]
 
 # Capped so the Jetson/build host doesn't OOM: -j6 compiler jobs,
@@ -55,7 +57,7 @@ COPY --parents */package.xml ${ROS_WS}/src/
 RUN source ${ROS_SETUP} && \
     apt-get update && \
     rosdep install -y --from-paths ${ROS_WS}/src --ignore-src --rosdistro jazzy \
-        --skip-keys "realsense2_camera realsense2_camera_msgs" \
+        --skip-keys "realsense2_camera realsense2_camera_msgs librealsense2" \
     && rm -rf /var/lib/apt/lists/*
 
 ##############################################################################

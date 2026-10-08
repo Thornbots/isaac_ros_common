@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # container.sh: sourced by dexec.sh, kill_launch.sh and smoke.sh. Sets
 # CONTAINER and CONTAINER_USER; never starts anything.
 # CONTAINER: $ISAAC_ROS_CONTAINER, else docker.run.container_name from
