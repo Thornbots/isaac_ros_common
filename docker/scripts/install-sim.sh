@@ -1,8 +1,8 @@
 #!/bin/bash
 # install-sim.sh
 #
-# Installs `sim`'s dependencies (gz-sim Harmonic via ros_gz from its
-# package.xml, and trimesh from pip for tools/simplify_urdf.py) and builds
+# Installs `sim`'s dependencies (including gz-sim Harmonic) from its
+# package.xml and builds
 # the package. Dockerfile.thornbots leaves all of it out on purpose: real
 # hardware never launches a sim.
 #
@@ -33,11 +33,6 @@ done
 rosdep install -y --from-paths "${PKG_DIRS[@]}" --ignore-src --rosdistro jazzy \
     --skip-keys "realsense2_camera realsense2_camera_msgs"
 rm -rf /var/lib/apt/lists/*
-
-# Noble has no python3-trimesh and rosdep only knows it as a pip key, so pip
-# it here. PEP 668 needs --break-system-packages; --no-deps keeps pip off the
-# apt numpy the ROS stack uses.
-pip install --break-system-packages --no-deps trimesh
 
 # Build as the workspace owner, not root: build/ and install/ are bind-mounted
 # from the host, and root-owned files there break the next non-root

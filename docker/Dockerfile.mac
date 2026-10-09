@@ -27,8 +27,7 @@ RUN source /opt/ros/jazzy/setup.bash && \
     apt-get update && \
     rosdep update --rosdistro jazzy && \
     rosdep install -y --from-paths /tmp/manifests --ignore-src --rosdistro jazzy && \
-    rm -rf /var/lib/apt/lists/* /tmp/manifests && \
-    pip install --break-system-packages --no-deps trimesh
+    rm -rf /var/lib/apt/lists/* /tmp/manifests
 
 COPY isaac_ros_common/docker/fastdds_cable.xml /etc/fastdds/profile.xml
 RUN { echo "export ROS_DOMAIN_ID=1"; \
