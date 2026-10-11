@@ -173,8 +173,8 @@ running container instead.
 
 The Humble image sat at 127 of overlay2's ~128 layers on aarch64, 25 of them
 from this file. On x86_64 (2026-09-26) the Jazzy image is 42: `isaac_ros` 25,
-`realsense` 9, this file 8 (the four above plus a 4 kB `WORKDIR`). Check
-headroom with
+`realsense` 9, this file 8 (the seven `RUN`/`COPY` steps behind the four
+rows above, plus a 4 kB `WORKDIR`). Check headroom with
 `docker inspect <image> --format '{{len .RootFS.Layers}}'`.
 
 ## rosdep and `--skip-keys`
