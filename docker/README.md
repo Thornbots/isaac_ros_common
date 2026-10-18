@@ -285,30 +285,92 @@ keeps the YOLO bridge's manifest out of rosdep for the same reason.
 
 # Windows (WSL2)
 
-Untested. Run Docker inside WSL2 Ubuntu 24.04 and follow the Linux flow
-there; the Docker helper scripts are bash, so use the WSL shell, not PowerShell.
-NVIDIA does not list WSL2 as an Isaac ROS platform.
+Untested end to end. Requires an x86_64 machine with an NVIDIA GPU. Docker
+Desktop runs the engine on WSL2, and everything below the Windows steps runs
+in an Ubuntu 24.04 WSL shell, not PowerShell.
 
-On Windows, install the NVIDIA Windows driver only (no Linux driver inside
-WSL), then `wsl --install -d Ubuntu-24.04`. In `%UserProfile%\.wslconfig`
-set `networkingMode=mirrored` under `[wsl2]`: the default NAT hides Fast DDS
-discovery from other machines. Raise `memory` there too for image builds.
+## Windows side
 
-Inside WSL:
+In an admin PowerShell, then reboot and open **Ubuntu 24.04** from the
+Start menu once to create your Linux user:
 
-- Install Docker Engine, or use Docker Desktop's WSL2 backend.
-- Clone the workspace on WSL's own filesystem (`~/workspaces/...`), not
-  `/mnt/c` and not with Git for Windows: CRLF breaks the scripts,
-  `setup_workspace.sh` needs symlinks, and `/mnt/c` bind mounts are slow.
-- With an NVIDIA GPU: install `nvidia-container-toolkit`, then
-  `sudo nvidia-ctk runtime configure --runtime=docker`,
-  `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`, and restart
-  Docker. `docker run --rm --gpus all ubuntu nvidia-smi` must list the GPU.
-  Then install the CLI and [build](#building) as on Linux.
-- Without one: build and run [`Dockerfile.mac`](#dockerfilemac) with the same
-  commands. Its base image is multi-arch, so it builds for amd64 too.
+```powershell
+wsl --install -d Ubuntu-24.04
+winget install -e --id Docker.DockerDesktop
+nvidia-smi          # the GPU and a current NVIDIA Windows driver
+```
 
-WSLg provides `DISPLAY` for rviz and gz; fall back to Foxglove (port 8765)
-if they render badly. USB devices (RealSense, rplidar, MCB) need
-[usbipd-win](https://learn.microsoft.com/en-us/windows/wsl/connect-usb);
-RealSense over usbip is unreliable, so use a Linux host for camera work.
+Install only the Windows NVIDIA driver; never a Linux driver inside WSL.
+Create `%UserProfile%\.wslconfig`, then run `wsl --shutdown`:
+
+```ini
+[wsl2]
+# image builds; the default is half of RAM
+memory=24GB
+# WSL shares Windows' interfaces, tailscale included
+networkingMode=mirrored
+```
+
+In Docker Desktop settings:
+
+- General: **Use the WSL 2 based engine**.
+- Resources > WSL integration: enable **Ubuntu-24.04**.
+- Resources > Network: **Enable host networking**. The CLI starts the
+  container with `--network host`, which DDS needs.
+
+## Ubuntu (WSL) side
+
+Check that `docker` and the GPU reach the distro:
+
+```bash
+nvidia-smi
+docker run --rm --gpus all ubuntu nvidia-smi
+```
+
+Clone on WSL's own filesystem, never under `/mnt/c` or with Git for
+Windows: CRLF breaks the scripts, `setup_workspace.sh` needs symlinks, and
+`/mnt/c` bind mounts are slow.
+
+```bash
+sudo apt-get update && sudo apt-get install -y git curl usbutils
+mkdir -p ~/workspaces/isaac_ros-jazzy && cd ~/workspaces/isaac_ros-jazzy
+git clone --recurse-submodules https://github.com/Thornbots/thornbots_workspace.git src
+```
+
+Install the CLI ([`install_isaac_ros_cli.sh`](../scripts/install_isaac_ros_cli.sh)
+needs `uv`), link our config, and build and start the image:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.local/bin/env
+src/isaac_ros_common/scripts/install_isaac_ros_cli.sh
+src/isaac_ros_common/scripts/setup_workspace.sh
+echo 'export ISAAC_ROS_WS=~/workspaces/isaac_ros-jazzy' >> ~/.bashrc
+source ~/.bashrc
+touch ~/.Xauthority     # the CLI bind-mounts it; if missing, Docker makes a directory
+isaac-ros activate --build-local
+```
+
+The first build compiles librealsense, roughly half an hour. Later, start
+the container with `isaac-ros activate` (see [Building](#building) for
+rebuilding after package edits). Running `isaac-ros activate` again from
+another WSL shell attaches a second shell to the running container.
+
+WSLg supplies `DISPLAY` for rviz and gz. If they fail to open, watch in
+Foxglove on `ws://localhost:8765`.
+
+## USB devices
+
+RealSense, rplidar and the MCB reach WSL through
+[usbipd-win](https://learn.microsoft.com/en-us/windows/wsl/connect-usb).
+In an admin PowerShell, after each replug:
+
+```powershell
+winget install usbipd      # once
+usbipd list                # find the BUSID
+usbipd bind --busid 2-3    # once per device
+usbipd attach --wsl --busid 2-3
+```
+
+Then `lsusb` in WSL lists it. RealSense streaming over usbip is unreliable;
+use a Linux host for camera work.
