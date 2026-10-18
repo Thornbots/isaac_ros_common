@@ -13,7 +13,7 @@ This fork adds the Thornbots image and host setup on top of NVIDIA
   [pull it from GHCR](docker/README.md#pulling-from-github-container-registry).
 - Apple Silicon: [`Dockerfile.mac` container](docker/README.md#dockerfilemac)
   or [native RoboStack](macos/README.md).
-- Windows: [Docker in WSL2](docker/README.md#windows-wsl2).
+- Windows with an NVIDIA GPU: [Docker Desktop on WSL2](docker/README.md#windows-wsl2).
 
 ## Overview
 
