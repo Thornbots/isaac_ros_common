@@ -2,6 +2,18 @@
 
 Essential utilities, packages, scripts, and testing infrastructure for Isaac ROS packages.
 
+## Thornbots fork
+
+This fork adds the Thornbots image and host setup on top of NVIDIA
+`release-4.6`; everything below this section is upstream.
+
+- Clone the workspace: [submodules](../README.md#working-with-submodules).
+- Isaac ROS image: [`Dockerfile.thornbots`](docker/README.md#dockerfilethornbots);
+  [build it locally](docker/README.md#building) or, on robots,
+  [pull it from GHCR](docker/README.md#pulling-from-github-container-registry).
+- Apple Silicon: [`Dockerfile.mac` container](docker/README.md#dockerfilemac)
+  or [native RoboStack](macos/README.md).
+
 ## Overview
 
 The Isaac ROS Common
