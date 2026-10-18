@@ -282,3 +282,33 @@ answering ssh.
 `--base-paths` leaves out `realsense-yolov8-nitros-bridge` (it needs Isaac
 ROS) and `isaac_ros_common`'s upstream packages. `Dockerfile.mac.dockerignore`
 keeps the YOLO bridge's manifest out of rosdep for the same reason.
+
+# Windows (WSL2)
+
+Untested. Run Docker inside WSL2 Ubuntu 24.04 and follow the Linux flow
+there; the Docker helper scripts are bash, so use the WSL shell, not PowerShell.
+NVIDIA does not list WSL2 as an Isaac ROS platform.
+
+On Windows, install the NVIDIA Windows driver only (no Linux driver inside
+WSL), then `wsl --install -d Ubuntu-24.04`. In `%UserProfile%\.wslconfig`
+set `networkingMode=mirrored` under `[wsl2]`: the default NAT hides Fast DDS
+discovery from other machines. Raise `memory` there too for image builds.
+
+Inside WSL:
+
+- Install Docker Engine, or use Docker Desktop's WSL2 backend.
+- Clone the workspace on WSL's own filesystem (`~/workspaces/...`), not
+  `/mnt/c` and not with Git for Windows: CRLF breaks the scripts,
+  `setup_workspace.sh` needs symlinks, and `/mnt/c` bind mounts are slow.
+- With an NVIDIA GPU: install `nvidia-container-toolkit`, then
+  `sudo nvidia-ctk runtime configure --runtime=docker`,
+  `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`, and restart
+  Docker. `docker run --rm --gpus all ubuntu nvidia-smi` must list the GPU.
+  Then install the CLI and [build](#building) as on Linux.
+- Without one: build and run [`Dockerfile.mac`](#dockerfilemac) with the same
+  commands. Its base image is multi-arch, so it builds for amd64 too.
+
+WSLg provides `DISPLAY` for rviz and gz; fall back to Foxglove (port 8765)
+if they render badly. USB devices (RealSense, rplidar, MCB) need
+[usbipd-win](https://learn.microsoft.com/en-us/windows/wsl/connect-usb);
+RealSense over usbip is unreliable, so use a Linux host for camera work.
