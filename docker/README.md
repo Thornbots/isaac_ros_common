@@ -301,7 +301,17 @@ nvidia-smi          # the GPU and a current NVIDIA Windows driver
 ```
 
 Install only the Windows NVIDIA driver; never a Linux driver inside WSL.
-Create `%UserProfile%\.wslconfig`, then run `wsl --shutdown`:
+
+WSL2's VM settings, which Docker Desktop's engine shares, live in
+`.wslconfig` in your Windows home folder (`C:\Users\<you>\.wslconfig`).
+It doesn't exist by default. Create it from PowerShell and answer yes when
+Notepad offers to create the file:
+
+```powershell
+notepad "$env:USERPROFILE\.wslconfig"
+```
+
+Paste this, save, and close Notepad:
 
 ```ini
 [wsl2]
@@ -310,6 +320,16 @@ memory=24GB
 # WSL shares Windows' interfaces, tailscale included
 networkingMode=mirrored
 ```
+
+Check the name (File Explorer can save it as `.wslconfig.txt`, which WSL
+ignores), then restart WSL to apply it:
+
+```powershell
+dir "$env:USERPROFILE\.wslconfig"
+wsl --shutdown
+```
+
+This is not `/etc/wsl.conf`, which configures one distro from inside it.
 
 In Docker Desktop settings:
 
