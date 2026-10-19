@@ -38,7 +38,7 @@ usage() {
 }
 
 # Same preflight as dexec.sh -- without it a stopped container produces a
-# raw daemon error. Starting the container is the user's call, never ours.
+# raw daemon error. Containers come from agent_container.sh, not this script.
 if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
     echo "kill_launch.sh: container '$CONTAINER' is not running" \
          "(so nothing is left to kill)." >&2

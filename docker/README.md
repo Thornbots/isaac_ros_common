@@ -254,7 +254,10 @@ docker run -d --name isaac_ros_jazzy_container --restart unless-stopped --shm-si
 
 The workspace is the directory holding `src/`: mount the git checkout, not
 a copy, or edits never reach the container. The name matches
-`.isaac-ros-cli/config.yaml`, so `dexec.sh` and friends find it. Then:
+`.isaac-ros-cli/config.yaml`, so `dexec.sh` and friends find it. This is the
+user's long-lived container; agents use `scripts/agent_container.sh` instead
+([skill](../../.claude/skills/isaac-ros-docker/SKILL.md#your-own-container)).
+Then:
 
 ```sh
 docker exec -it isaac_ros_jazzy_container bash
