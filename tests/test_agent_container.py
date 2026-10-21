@@ -90,6 +90,7 @@ class AgentContainerTest(unittest.TestCase):
                 '  echo other-invocation > "$STATE/replacement-id"\n'
                 'fi\n'
                 'if [ "$MODE" = command-signal ]; then kill -TERM "$PPID"; fi\n'
+                'if [ "$MODE" = command-wait-signal ]; then kill -TERM "$PPID"; exec sleep 60; fi\n'
                 '[ "$MODE" != command-fail ] || exit 42\n')
             (state / 'dexec').chmod(0o755)
             if existing:
@@ -142,7 +143,7 @@ class AgentContainerTest(unittest.TestCase):
                     self.assertNotIn('dexec\n', files['calls'])
 
     def test_normal_and_command_failure_cleanup_use_immutable_id(self):
-        for mode, rc in [('normal', 0), ('command-fail', 42), ('command-signal', 143), ('replacement', 0)]:
+        for mode, rc in [('normal', 0), ('command-fail', 42), ('command-signal', 143), ('command-wait-signal', 143), ('replacement', 0)]:
             with self.subTest(mode=mode):
                 result, files = self.exercise(mode)
                 self.assertEqual(result.returncode, rc, result.stderr)

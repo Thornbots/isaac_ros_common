@@ -50,6 +50,7 @@ INVOCATION=""
 OWN_CONTAINER=""
 OWN_VOLUMES=()
 OWN_COLIMA=0
+RUN_PID=""
 lock() {
     local i=0 pid
     until mkdir "$LOCK" 2>/dev/null; do
@@ -134,6 +135,9 @@ cleanup_invocation() {
     local rc=$? v id removed=0
     trap - EXIT
     trap '' INT TERM HUP
+    if [ -n "$RUN_PID" ]; then
+        kill -TERM "$RUN_PID" 2>/dev/null || true
+    fi
     if [ "$RETAIN_OWNED" -eq 0 ]; then
         [ "$HELD" -eq 1 ] || lock
         if [ -n "$OWN_CONTAINER" ] && \
@@ -280,7 +284,13 @@ cmd_run() {
     [ "${1:-}" = "--" ] && shift
     [ "$#" -gt 0 ] || die "run: no command"
     cmd_up "$task" ${opts[@]+"${opts[@]}"} || exit 1
-    ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@"
+    # Bash defers traps during a foreground external command; wait is interruptible.
+    ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@" &
+    RUN_PID=$!
+    local rc
+    wait "$RUN_PID"; rc=$?
+    RUN_PID=""
+    return "$rc"
 }
 
 cmd_ls() {
