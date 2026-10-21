@@ -77,7 +77,7 @@ docker() {
 
 
 class AgentContainerTest(unittest.TestCase):
-    def exercise(self, mode, command='run', existing=False, orphan=False):
+    def exercise(self, mode, command='run', existing=False, orphan=False, input_text=None):
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp)
             workspace = state / 'workspace'
@@ -91,6 +91,7 @@ class AgentContainerTest(unittest.TestCase):
                 'fi\n'
                 'if [ "$MODE" = command-signal ]; then kill -TERM "$PPID"; fi\n'
                 'if [ "$MODE" = command-wait-signal ]; then kill -TERM "$PPID"; exec sleep 60; fi\n'
+                'if [ "$MODE" = command-stdin ]; then cat > "$STATE/stdin"; fi\n'
                 '[ "$MODE" != command-fail ] || exit 42\n')
             (state / 'dexec').chmod(0o755)
             if existing:
@@ -104,7 +105,7 @@ class AgentContainerTest(unittest.TestCase):
             result = subprocess.run(
                 ['/bin/bash', '-c', SOURCE + MOCKS + invocation],
                 env=dict(os.environ, STATE=tmp, MODE=mode, WORKSPACE=str(workspace)),
-                capture_output=True, text=True, timeout=10)
+                input=input_text, capture_output=True, text=True, timeout=10)
             files = {p.name: p.read_text() for p in state.iterdir() if p.is_file()}
             return result, files
 
@@ -158,6 +159,13 @@ class AgentContainerTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('owned-id', files)
         self.assertNotIn('rm -f', files['calls'])
+
+    def test_interruptible_command_preserves_piped_input(self):
+        payload = 'first command input\nsecond command input\n'
+        result, files = self.exercise('command-stdin', input_text=payload)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(files['stdin'], payload)
+        self.assertIn('rm -f -v owned-id\n', files['calls'])
 
 
 if __name__ == '__main__':

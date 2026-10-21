@@ -285,7 +285,7 @@ cmd_run() {
     [ "$#" -gt 0 ] || die "run: no command"
     cmd_up "$task" ${opts[@]+"${opts[@]}"} || exit 1
     # Bash defers traps during a foreground external command; wait is interruptible.
-    ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@" &
+    ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@" <&0 &
     RUN_PID=$!
     local rc
     wait "$RUN_PID"; rc=$?
