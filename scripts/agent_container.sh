@@ -44,6 +44,13 @@ if [ "$OS" = Darwin ]; then
 fi
 
 HELD=0
+RUN_MODE=0
+RETAIN_OWNED=0
+INVOCATION=""
+OWN_CONTAINER=""
+OWN_VOLUMES=()
+OWN_COLIMA=0
+RUN_PID=""
 lock() {
     local i=0 pid
     until mkdir "$LOCK" 2>/dev/null; do
@@ -59,7 +66,7 @@ unlock() { [ "$HELD" -eq 1 ] && rm -rf "$LOCK"; HELD=0; return 0; }
 colima_up() {
     [ "$OS" = Darwin ] || return 0
     command -v colima >/dev/null || die "colima not found"
-    colima status >/dev/null 2>&1 || { say "starting colima"; colima start >&2 || die "colima start failed"; }
+    colima status >/dev/null 2>&1 || { say "starting colima"; OWN_COLIMA=1; colima start >&2 || die "colima start failed"; }
     [ -z "${DOCKER_HOST:-}" ] && [ -S "$HOME/.colima/default/docker.sock" ] \
         && export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
     return 0
@@ -122,6 +129,33 @@ cmd_down() {
     lock; remove_task "$task"; say "removed $(cname "$task")"; colima_stop_if_idle; unlock
 }
 
+# EXIT cleanup is scoped to a random creation label, never to a reusable task.
+# Names are recorded before API calls so a failed/interrupted create is covered.
+cleanup_invocation() {
+    local rc=$? v id removed=0
+    trap - EXIT
+    trap '' INT TERM HUP
+    if [ -n "$RUN_PID" ]; then
+        kill -TERM "$RUN_PID" 2>/dev/null || true
+    fi
+    if [ "$RETAIN_OWNED" -eq 0 ]; then
+        [ "$HELD" -eq 1 ] || lock
+        if [ -n "$OWN_CONTAINER" ] && \
+            [ "$(label_of "$OWN_CONTAINER" thornbots.invocation)" = "$INVOCATION" ]; then
+            id="$(docker inspect -f '{{.Id}}' "$OWN_CONTAINER")"
+            [ -z "$id" ] || { docker rm -f -v "$id" >/dev/null; removed=1; }
+        fi
+        for v in ${OWN_VOLUMES[@]+"${OWN_VOLUMES[@]}"}; do
+            if [ "$(docker volume inspect -f '{{index .Labels "thornbots.invocation"}}' "$v" 2>/dev/null)" = "$INVOCATION" ]; then
+                docker volume rm -f "$v" >/dev/null; removed=1
+            fi
+        done
+        if [ "$removed" -eq 1 ] || [ "$OWN_COLIMA" -eq 1 ]; then colima_stop_if_idle; fi
+    fi
+    unlock
+    exit "$rc"
+}
+
 cmd_up() {
     local task="${1:-}"; valid_task "$task" || die "task must match [a-z0-9][a-z0-9-]{0,39}"
     shift
@@ -143,7 +177,10 @@ cmd_up() {
 
     local c; c="$(cname "$task")"
     lock
-    trap 'remove_task "$task"; unlock' INT TERM HUP
+    trap cleanup_invocation EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
     colima_up
     docker inspect "$c" >/dev/null 2>&1 && { unlock; die "$c already exists (task name in use; 'down $task' if it is yours)"; }
     # Same checkout under two agents would share build state and edits.
@@ -170,12 +207,22 @@ cmd_up() {
     part="agent-$task-$dom"
     taken partition | grep -qx "$part" && { unlock; die "GZ_PARTITION $part in use"; }
 
-    local now v; now="$(date +%s)"
+    local now v token_dir
+    now="$(date +%s)"
     for v in build install log; do
-        docker volume create --label "$LABEL=$task" --label "thornbots.created=$now" "$c-$v" >/dev/null
+        docker volume inspect "$c-$v" >/dev/null 2>&1 && die "volume $c-$v already exists; refusing reuse"
+    done
+    token_dir="$(mktemp -d /tmp/thornbots-invocation.XXXXXXXXXX)" || die "cannot allocate invocation ID"
+    INVOCATION="${token_dir##*/}"; rmdir "$token_dir"
+    for v in build install log; do
+        OWN_VOLUMES+=("$c-$v")
+        docker volume create --label "$LABEL=$task" --label "thornbots.created=$now" \
+            --label "thornbots.invocation=$INVOCATION" "$c-$v" >/dev/null || die "volume create failed"
+        [ "$(docker volume inspect -f '{{index .Labels "thornbots.invocation"}}' "$c-$v")" = "$INVOCATION" ] \
+            || die "volume $c-$v is not owned by this invocation"
     done
     local args=(run -d --init --name "$c" --shm-size=2g
-        --label "$LABEL=$task" --label "thornbots.domain=$dom" --label "thornbots.partition=$part"
+        --label "$LABEL=$task" --label "thornbots.invocation=$INVOCATION" --label "thornbots.domain=$dom" --label "thornbots.partition=$part"
         --label "thornbots.src=$src" --label "thornbots.created=$now"
         -e "ROS_DOMAIN_ID=$dom" -e "GZ_PARTITION=$part"
         -e "THORNBOTS_ROS_DOMAIN_ID=$dom" -e "THORNBOTS_GZ_PARTITION=$part"
@@ -193,22 +240,27 @@ cmd_up() {
             --entrypoint /usr/local/bin/scripts/workspace-entrypoint.sh)
     fi
     args+=("$image" sleep infinity)
-    if ! docker "${args[@]}" >/dev/null; then
-        remove_task "$task"; unlock; die "docker run failed"
-    fi
+    OWN_CONTAINER="$c"
+    docker "${args[@]}" >/dev/null || die "docker run failed"
+    [ "$(label_of "$c" thornbots.invocation)" = "$INVOCATION" ] || die "container creation ownership mismatch"
+    local created_id
+    created_id="$(docker inspect -f '{{.Id}}' "$c")" || die "cannot read created container ID"
+    [ -n "$created_id" ] || die "empty created container ID"
+    OWN_CONTAINER="$created_id"
 
     local user=root i
     [ "$OS" = Darwin ] || user=admin
     for i in $(seq 1 60); do
-        docker exec "$c" id -u "$user" >/dev/null 2>&1 && break
-        [ "$i" -lt 60 ] || { remove_task "$task"; unlock; die "$c never became ready"; }
+        docker exec "$OWN_CONTAINER" id -u "$user" >/dev/null 2>&1 && break
+        [ "$i" -lt 60 ] || { die "$c never became ready"; }
         sleep 1
     done
-    docker exec -u root "$c" chown "$user:$user" /workspaces/isaac_ros-dev/build \
-        /workspaces/isaac_ros-dev/install /workspaces/isaac_ros-dev/log >/dev/null
-    trap - INT TERM HUP
+    docker exec -u root "$OWN_CONTAINER" chown "$user:$user" /workspaces/isaac_ros-dev/build \
+        /workspaces/isaac_ros-dev/install /workspaces/isaac_ros-dev/log >/dev/null || die "volume ownership setup failed"
     unlock
     print_env "$task"
+    [ "$RUN_MODE" -eq 1 ] || RETAIN_OWNED=1
+    return 0
 }
 
 print_env() {
@@ -223,19 +275,22 @@ print_env() {
     echo "export ISAAC_ROS_CONTAINER=$c"
 }
 
-RUN_TASK=""
 cmd_run() {
     local task="${1:-}"; valid_task "$task" || die "usage: run <task> [opts] -- <cmd...>"
-    RUN_TASK="$task"
+    RUN_MODE=1
     shift
     local opts=()
     while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do opts+=("$1"); shift; done
     [ "${1:-}" = "--" ] && shift
     [ "$#" -gt 0 ] || die "run: no command"
-    trap 'unlock; lock; remove_task "$RUN_TASK" 2>/dev/null; colima_stop_if_idle; unlock' EXIT
-    trap 'exit 130' INT TERM HUP
     cmd_up "$task" ${opts[@]+"${opts[@]}"} || exit 1
-    ISAAC_ROS_CONTAINER="$(cname "$task")" "$DEXEC" -- "$@"
+    # Bash defers traps during a foreground external command; wait is interruptible.
+    ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@" <&0 &
+    RUN_PID=$!
+    local rc
+    wait "$RUN_PID"; rc=$?
+    RUN_PID=""
+    return "$rc"
 }
 
 cmd_ls() {
