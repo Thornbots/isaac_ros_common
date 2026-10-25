@@ -34,8 +34,8 @@
 #   -r        run as root instead of admin (needed for apt-get etc.)
 #   -d        detach (docker exec -d) -- for launches you want left running;
 #             wrapped in `setsid` so the launch becomes its own process
-#             group leader, letting kill_launch.sh clean it up properly
-#             later (see that script for why this matters)
+#             group leader for isolation from the exec session;
+#             kill_launch.sh verifies ownership before stopping descendants
 #   -w DIR    override workdir (default /workspaces/isaac_ros-dev)
 #
 # Container name and user: see container.sh.
@@ -125,9 +125,8 @@ if [ "$DETACH" -eq 1 ]; then
     # an `echo` on the container side (as this used to do) is never seen by
     # the caller.
     LOG="/tmp/dexec_$$.log"
-    # setsid so the whole launch tree shares one process group, separate
-    # from this docker exec's own -- kill_launch.sh needs that to clean up
-    # the entire tree with one SIGINT instead of missing orphaned children.
+    # Keep the detached command in its own session. kill_launch.sh selects
+    # ROS roots by container ownership and signals verified descendants.
     docker exec -d -u "$USERNAME" --workdir "$WORKDIR" "$CONTAINER" \
         bash -lc "$SOURCE_ENV && setsid nohup $CMD > $LOG 2>&1 < /dev/null & disown"
     echo "started detached in $CONTAINER (log: $LOG)"
