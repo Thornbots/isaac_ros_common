@@ -4,7 +4,7 @@
 # Stage 2 (next boot): build the image once, start thornbots.service, and
 # disable this unit. Log: journalctl -u robot-firstboot; state in
 # /var/lib/robot-firstboot. Re-runs a failed stage on the next boot.
-set -euxo pipefail
+set -euo pipefail
 S=/var/lib/robot-firstboot
 # shellcheck source=/dev/null
 source "$S/robot.env"

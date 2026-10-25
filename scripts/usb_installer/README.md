@@ -9,7 +9,9 @@ SSH public key and optional Tailscale secret; protect the ISO and stick.
 The OEM hook creates the robot user, validates a final
 `zz-robot-nopasswd` sudoers rule, and enables `robot-firstboot.service` for
 network-dependent workspace setup. Passwordless sudo is intentional for
-unattended provisioning.
+unattended provisioning. Both hooks retain strict error handling but disable
+command tracing so `robot.env` credentials stay out of installer and first-boot
+journals.
 
 ## Boot handoff
 

@@ -4,7 +4,7 @@
 # /cdrom/oemdata. Makes the robot user in place of nooemconfig's nvidia user,
 # sets hostname, SSH key, sudo, timezone and Wi-Fi, boots headless, and
 # enables robot-firstboot.service to finish setup once the network is up.
-set -euxo pipefail
+set -euo pipefail
 D=/cdrom/oemdata
 # shellcheck source=/dev/null
 source "$D/robot.env"

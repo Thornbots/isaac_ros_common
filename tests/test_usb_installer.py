@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import shlex
 from pathlib import Path
 import subprocess
 import tempfile
@@ -158,6 +159,37 @@ class BootHandoffTest(unittest.TestCase):
                 result, state = self.run_hook(**options)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(any(c[0] == 'efibootmgr' for c in state['calls']))
+
+
+class CredentialTracingTest(unittest.TestCase):
+    def test_hooks_source_credentials_without_tracing_and_keep_strict_mode(self):
+        source = Path(__file__).resolve().parents[1] / 'scripts/usb_installer'
+        for name in ('oem-iso-cfg.sh', 'robot-firstboot.sh'):
+            with self.subTest(hook=name), tempfile.TemporaryDirectory() as tmp:
+                env_path = Path(tmp) / 'robot.env'
+                secrets = ('test-password-hash-sentinel', 'test-authkey-sentinel')
+                env_path.write_text(f'PASSWORD_HASH={secrets[0]}\nTS_AUTHKEY={secrets[1]}\n')
+                script = (source / name).read_text()
+                for line in script.splitlines():
+                    if line.lstrip().startswith('set '):
+                        words = shlex.split(line, comments=True)
+                        self.assertFalse(any(
+                            (word.startswith('-') and any(c in word for c in 'xv'))
+                            or word in ('xtrace', 'verbose') for word in words[1:]), line)
+                # Exercise the real startup through sourcing, before provisioning.
+                startup, remainder = script.split('/robot.env"', 1)
+                self.assertTrue(remainder.startswith('\n'))
+                startup = startup.rsplit('source ', 1)[0]
+                probe = startup + f'source "{env_path}"\n' + r'''
+[[ $- != *x* && $- == *e* && $- == *u* ]]
+[[ $(set -o | awk '$1 == "pipefail" {print $2}') == on ]]
+: "$PASSWORD_HASH" "$TS_AUTHKEY"
+'''
+                result = subprocess.run(['bash', '-c', probe], text=True,
+                                        capture_output=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for secret in secrets:
+                    self.assertNotIn(secret, result.stdout + result.stderr)
 
 
 class InstallerPackagingTest(unittest.TestCase):
