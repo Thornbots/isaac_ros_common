@@ -8,7 +8,6 @@
 # mode (l4tbr0).
 #   sudo ./jetson_trim.sh [--dry-run]   # reboot afterwards; --dry-run lists the purge only
 # Undo the desktop: sudo systemctl set-default graphical.target
-# see JAZZY_FLASH.md for design rationale
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
 log() { printf '\n== %s\n' "$*"; }

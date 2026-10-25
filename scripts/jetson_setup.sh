@@ -1,13 +1,12 @@
 #!/bin/bash
 # jetson_setup.sh: host setup for an Orin Nano on JetPack 7.2.1 (L4T R39.2.1),
-# run once after the USB installer and oem-config. Covers JAZZY_FLASH.md
-# section 6, isaac-ros-cli included, plus the robot-specific host settings.
+# run once after the USB installer and oem-config: JetPack components,
+# Docker, NVIDIA container toolkit and isaac-ros-cli, plus robot host settings.
 # Run as the robot user:
 #   sudo ./jetson_setup.sh
 # It replaces and restarts Docker, so it refuses to run while a build or
 # container is up (--force overrides). Reboot afterwards.
 # Safe to re-run.
-# see JAZZY_FLASH.md for design rationale
 set -euo pipefail
 
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }

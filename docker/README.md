@@ -204,7 +204,7 @@ shipped no `libdiagnostic_updater.so`. Jazzy ships 4.2.x, so the pin is gone.
 - `udev_rules/98-rplidar.rules` and `scripts/hotplug-rplidar.sh` go to
   `/etc/udev/rules.d/` and `/opt/rplidar/`.
 - `/etc/bash.bashrc` gets `ROS_DOMAIN_ID` (build arg, default 1 until the
-  Jazzy cutover), the FastDDS profile, `rmw_fastrtps_cpp`, and the Jazzy and
+  [domain-0 switch](../../docs/ROADMAP.md#later-needs-a-robot)), the FastDDS profile, `rmw_fastrtps_cpp`, and the Jazzy and
   `ros2_ws` setup files.
 
 ## `sim` is deliberately not in the image

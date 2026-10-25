@@ -22,6 +22,6 @@ owning package and apt dependencies in `package.xml`, not a Docker layer.
   Decide whether robots should replace it with an empty file; this does not
   authorize reading credentials.
 - Container rplidar hotplug/udev acceptance remains in
-  [hardware status](../docs/JAZZY_FLASH.md#hardware-status).
+  the [ROADMAP](../docs/ROADMAP.md#later-needs-a-robot).
 - Robot build speed: [ROADMAP T29](../docs/ROADMAP.md#short-todos).
-- Native Mac GUI rendering remains unverified; use [hardware status](../docs/JAZZY_FLASH.md#hardware-status).
+- Native Mac GUI rendering remains unverified.
