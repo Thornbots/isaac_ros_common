@@ -29,9 +29,9 @@ if [ ! -e "$S/stage1-done" ]; then
             'git checkout -q $(git config -f $toplevel/.gitmodules submodule.$name.branch)'
     fi
     as_user "$WS/src/isaac_ros_common/scripts/setup_workspace.sh"
-    touch "$S/stage1-done"
-    # robot_setup.sh ends in a reboot; stage 2 runs on the next boot.
-    SUDO_USER="$ROBOT_USER" bash "$WS/src/isaac_ros_common/scripts/robot_setup.sh"
+    # Setup records completion before its final power-mode change can reboot.
+    SUDO_USER="$ROBOT_USER" ROBOT_SETUP_COMPLETE_FILE="$S/stage1-done" \
+        bash "$WS/src/isaac_ros_common/scripts/robot_setup.sh"
     exit 0
 fi
 

@@ -47,6 +47,12 @@ else
         "sudo tailscale up --ssh --hostname ts-$(hostname | sed 's/^ts-//') --advertise-tags=tag:jetsons"
 fi
 
+# Firstboot supplies this optional marker; failed setup must remain resumable.
+# Write it before nvpmodel, which may reboot without returning to the caller.
+if [ -n "${ROBOT_SETUP_COMPLETE_FILE:-}" ]; then
+    touch -- "$ROBOT_SETUP_COMPLETE_FILE"
+fi
+
 log "MAXN_SUPER and reboot"
 ID=$(sed -n 's/^< POWER_MODEL ID=\([0-9]*\) NAME=MAXN_SUPER >/\1/p' /etc/nvpmodel.conf)
 [ -n "$ID" ] && nvpmodel -m "$ID" --force   # reboots if the mode changes
