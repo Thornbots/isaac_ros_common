@@ -14,8 +14,11 @@ groups=$(for g in sudo adm dialout video plugdev i2c gpio render audio; do
     getent group "$g" >/dev/null && printf '%s,' "$g"; done)
 id "$ROBOT_USER" >/dev/null 2>&1 ||
     useradd -m -s /bin/bash -G "${groups%,}" -p "$PASSWORD_HASH" "$ROBOT_USER"
-echo "$ROBOT_USER ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/90-$ROBOT_USER-nopasswd"
-chmod 440 "/etc/sudoers.d/90-$ROBOT_USER-nopasswd"
+# Sort after installer-provided user rules; validate the effective sudo config.
+sudoers="/etc/sudoers.d/zz-robot-nopasswd"
+printf '%s ALL=(ALL:ALL) NOPASSWD: ALL\n' "$ROBOT_USER" > "$sudoers"
+chmod 440 "$sudoers"
+visudo -cf /etc/sudoers
 H=/home/$ROBOT_USER
 install -d -m 700 -o "$ROBOT_USER" -g "$ROBOT_USER" "$H/.ssh"
 echo "$SSH_PUBKEY" > "$H/.ssh/authorized_keys"
@@ -42,3 +45,6 @@ install -m 600 "$D/robot.env" /var/lib/robot-firstboot/robot.env
 install -m 755 "$D/robot-firstboot.sh" /usr/local/sbin/robot-firstboot.sh
 install -m 644 "$D/robot-firstboot.service" /etc/systemd/system/robot-firstboot.service
 systemctl enable robot-firstboot.service
+
+# The OEM hook is appended after NVIDIA command_65/66; repair their USB choice.
+bash "$D/finish-boot-order.sh"

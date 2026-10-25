@@ -3,8 +3,9 @@
 # boot the stick once and reinstall, erasing the NVMe. No keyboard needed:
 #   sudo ./reinstall_from_usb.sh --yes
 # Adds a UEFI entry for the stick's EFI partition, keeps BootOrder as it was
-# (NVMe first, so the board can't loop into the installer), sets BootNext to
-# the stick and reboots. A board with no bootable NVMe boots the stick itself.
+# for this reboot, sets BootNext to the stick and reboots. The installer
+# OEM hook removes this temporary entry and restores the target NVMe first.
+# A board with no bootable NVMe boots the stick itself.
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
 [ "${1:-}" = --yes ] || { echo "this erases the NVMe on reboot; pass --yes" >&2; exit 1; }

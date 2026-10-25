@@ -1,0 +1,219 @@
+"""Exercise the in-target boot handoff without firmware or block-device access."""
+
+import json
+import os
+import shutil
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+
+MOCK = r'''#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+
+state_path = Path(os.environ['BOOT_TEST_STATE'])
+s = json.loads(state_path.read_text())
+cmd = Path(sys.argv[0]).name
+a = sys.argv[1:]
+s['calls'].append([cmd, *a])
+result = ''
+code = 0
+if cmd == 'mountpoint':
+    code = int(a[-1].endswith('efivars') and not s['mounted'])
+elif cmd == 'mount':
+    s['mounted'] = True
+    s['readonly'] = False
+elif cmd == 'findmnt':
+    if 'FSTYPE' in a:
+        result = 'efivarfs'
+    elif 'OPTIONS' in a:
+        result = 'ro,nosuid' if s['readonly'] else 'rw,nosuid'
+    else:
+        result = '/dev/nvme0n1p10' if a[-1].endswith('esp') else '/dev/nvme0n1p1'
+elif cmd == 'readlink':
+    result = a[-1]
+elif cmd == 'lsblk':
+    result = s['disk']
+elif cmd == 'blkid':
+    result = '12345678-1234-1234-1234-123456789abc'
+elif cmd == 'efibootmgr':
+    if a == ['-v']:
+        result = 'BootOrder: ' + ','.join(s['order']) + '\n'
+        if s['next']:
+            result += 'BootNext: ' + s['next'] + '\n'
+        for number, path in s['entries'].items():
+            result += 'Boot' + number + '* ' + path + '\n'
+    elif '-c' in a:
+        s['entries']['0007'] = s['target']
+        s['order'].insert(0, '0007')
+    elif '-B' in a:
+        del s['entries'][a[1]]
+        s['order'] = [n for n in s['order'] if n != a[1]]
+    elif a == ['-N']:
+        s['next'] = ''
+    elif a[0] == '-o':
+        s['order'] = a[1].split(',')
+state_path.write_text(json.dumps(s))
+if result:
+    print(result)
+sys.exit(code)
+'''
+
+
+class BootHandoffTest(unittest.TestCase):
+    def run_hook(self, *, existing=True, mounted=True, readonly=False,
+                 disk='nvme0n1', reserved='Robot installer (USB)', variables=True,
+                 usb=True, bootnext='00FE', missing_loader=False):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            esp = root / 'esp'
+            loader = esp / 'EFI/BOOT/BOOTAA64.efi'
+            loader.parent.mkdir(parents=True)
+            if not missing_loader:
+                loader.touch()
+            partition = root / 'partition'
+            partition.write_text('10\n')
+            variables_path = root / 'efivars'
+            if variables:
+                variables_path.mkdir()
+            target = ('NVMe L4T\tHD(10,GPT,12345678-1234-1234-1234-123456789ABC,'
+                      '0x1000,0x2000)/File(\\EFI\\BOOT\\BOOTAA64.efi)')
+            state = {
+                'entries': {
+                    '00FE': reserved + '\tHD(1,GPT,usb-guid,0x1,0x2)/File('
+                    '\\EFI\\BOOT\\grubaa64.efi)',
+                    '0001': 'Other NVMe\tHD(10,GPT,other-guid,0x1,0x2)/File('
+                    '\\EFI\\BOOT\\BOOTAA64.efi)',
+                },
+                'order': ['00FE', '0001'], 'next': bootnext, 'calls': [],
+                'mounted': mounted, 'readonly': readonly, 'disk': disk,
+                'target': target,
+            }
+            if existing:
+                state['entries']['0003'] = target
+                state['order'].append('0003')
+            if not usb:
+                del state['entries']['00FE']
+                state['order'].remove('00FE')
+            state_path = root / 'state.json'
+            state_path.write_text(json.dumps(state))
+            mock = root / 'mock'
+            mock.write_text(MOCK)
+            mock.chmod(0o755)
+            for name in ('mountpoint', 'mount', 'findmnt', 'readlink', 'lsblk',
+                         'blkid', 'efibootmgr'):
+                (root / name).symlink_to(mock)
+            source = Path(__file__).resolve().parents[1] / 'scripts/usb_installer'
+            script = (source / 'finish-boot-order.sh').read_text()
+            script = script.replace('/sys/firmware/efi/efivars', str(variables_path))
+            script = script.replace('/boot/efi', str(esp))
+            script = script.replace('/sys/class/block/${esp##*/}/partition', str(partition))
+            env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}",
+                       BOOT_TEST_STATE=str(state_path))
+            result = subprocess.run(['bash', '-c', script], env=env,
+                                    text=True, capture_output=True, check=False)
+            return result, json.loads(state_path.read_text())
+
+    def test_existing_target_wins_over_usb_and_other_nvme(self):
+        result, state = self.run_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['order'], ['0003', '0001'])
+        self.assertNotIn('00FE', state['entries'])
+        self.assertEqual(state['next'], '')
+        self.assertNotIn('-c', [arg for call in state['calls'] for arg in call])
+
+    def test_missing_entry_is_created_on_target_esp(self):
+        result, state = self.run_hook(existing=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['order'], ['0007', '0001'])
+        self.assertIn(['efibootmgr', '-c', '-d', '/dev/nvme0n1', '-p', '10',
+                       '-l', '\\EFI\\BOOT\\BOOTAA64.efi', '-L', 'Robot NVMe'], state['calls'])
+
+    def test_efivarfs_is_mounted_or_remounted(self):
+        for options in ({'mounted': False}, {'readonly': True}):
+            with self.subTest(options=options):
+                result, state = self.run_hook(**options)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(any(c[0] == 'mount' for c in state['calls']))
+
+    def test_direct_install_preserves_other_bootnext(self):
+        result, state = self.run_hook(usb=False, bootnext='0001')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['order'], ['0003', '0001'])
+        self.assertEqual(state['next'], '0001')
+
+    def test_unrelated_reserved_entry_is_preserved(self):
+        result, state = self.run_hook(reserved='Another OS')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('00FE', state['entries'])
+        self.assertEqual(state['order'][0], '00FE')
+
+    def test_non_nvme_and_missing_variables_fail_before_firmware_writes(self):
+        for options in ({'disk': 'sda'}, {'variables': False}, {'missing_loader': True}):
+            with self.subTest(options=options):
+                result, state = self.run_hook(**options)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any(c[0] == 'efibootmgr' for c in state['calls']))
+
+
+class InstallerPackagingTest(unittest.TestCase):
+    def test_builder_includes_boot_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            iso = root / 'source.iso'
+            iso.touch()
+            key = root / 'pubkey'
+            key.write_text('ssh-ed25519 test-public-key\n')
+            xorriso = root / 'xorriso'
+            xorriso.write_text(r'''#!/bin/bash
+set -eu
+if [ "$1" = -osirrox ]; then
+    cat > "${@: -1}" <<'GRUB'
+set default=0
+set timeout=-1
+menuentry "Install on NVMe" {
+linux /casper/Image autoinstall force-bootdisk=nvme0n1
+}
+GRUB
+else
+    touch "$4"
+    while [ "$1" != -map ] || [ "$3" != /oemdata ]; do shift; done
+    test -f "$2/finish-boot-order.sh"
+    grep -q 'finish-boot-order.sh' "$2/oem-iso-cfg.sh"
+    echo 'xorriso : UPDATE : verified OEM boot hook'
+fi
+''')
+            xorriso.chmod(0o755)
+            builder = (Path(__file__).resolve().parents[1] /
+                       'scripts/usb_installer/make_installer_usb.sh')
+            env = dict(os.environ, HOME=str(root), ROBOT_PASSWORD='test-only',
+                       TS_AUTHKEY='test-only', SSH_PUBKEY=str(key), XORRISO=str(xorriso))
+            result = subprocess.run(['bash', str(builder), '--robot', 'test',
+                                     '--iso', str(iso), '--out', str(root / 'out.iso')],
+                                    env=env, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('verified OEM boot hook', result.stdout)
+
+    @unittest.skipUnless(shutil.which('visudo'), 'visudo is not installed')
+    def test_oem_sudoers_rule_is_valid_and_passwordless(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = (Path(__file__).resolve().parents[1] /
+                      'scripts/usb_installer/oem-iso-cfg.sh').read_text()
+            block = source[source.index('sudoers='):source.index('H=/home/')]
+            block = block.replace('/etc/sudoers.d/zz-robot-nopasswd', str(root / 'rule'))
+            block = block.replace('/etc/sudoers', str(root / 'rule'))
+            result = subprocess.run(['bash', '-euc', 'ROBOT_USER=nano-test\n' + block],
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / 'rule').read_text(),
+                             'nano-test ALL=(ALL:ALL) NOPASSWD: ALL\n')
+            self.assertEqual((root / 'rule').stat().st_mode & 0o777, 0o440)
+
+
+if __name__ == '__main__':
+    unittest.main()
