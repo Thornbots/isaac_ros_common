@@ -4,19 +4,23 @@ set -euo pipefail
 SELF="$(cd "$(dirname "$0")/../scripts" && pwd)"
 export DOCKER_HOST="${DOCKER_HOST:-unix://$HOME/.colima/default/docker.sock}"
 TEMP="$(mktemp -d /tmp/launch-scope.XXXXXXXX)"
-TASK="launch-scope-$$"
-PEER="launch-peer-$$"
+TOKEN="$(printf '%s' "${TEMP##*.}" | tr '[:upper:]' '[:lower:]')"
+TASK="launch-scope-$TOKEN"
+PEER="launch-peer-$TOKEN"
+OWN_TARGET=0
+OWN_PEER=0
 REAL_DOCKER="$(command -v docker)"
 export REAL_DOCKER
 cleanup() {
-    PATH="$ORIGINAL_PATH" "$SELF/agent_container.sh" down "$TASK" || true
-    "$SELF/agent_container.sh" down "$PEER" || true
+    if [ "$OWN_TARGET" = 1 ]; then "$SELF/agent_container.sh" down "$TASK" || true; fi
+    if [ "$OWN_PEER" = 1 ]; then "$SELF/agent_container.sh" down "$PEER" || true; fi
     rm -rf "$TEMP"
 }
 ORIGINAL_PATH="$PATH"
 trap cleanup EXIT
 mkdir -p "$TEMP/peer/isaac_ros_common" "$TEMP/target/isaac_ros_common"
 "$SELF/agent_container.sh" up "$PEER" -w "$TEMP/peer"
+OWN_PEER=1
 PEER_CONTAINER="isaac-agent-$PEER"
 docker cp "$SELF/../tests/stop_fixture.launch.py" "$PEER_CONTAINER:/tmp/foreign.launch.py"
 ISAAC_ROS_CONTAINER="$PEER_CONTAINER" "$SELF/dexec.sh" -d -- ros2 launch /tmp/foreign.launch.py
@@ -42,6 +46,7 @@ for mode in private host; do
         export -f docker
     fi
     "$SELF/agent_container.sh" up "$TASK" -w "$TEMP/target"
+    OWN_TARGET=1
     export ISAAC_ROS_CONTAINER="isaac-agent-$TASK"
     actual="$(docker inspect -f '{{.HostConfig.PidMode}}' "$ISAAC_ROS_CONTAINER")"
     if [ "$mode" = host ]; then [ "$actual" = host ]; else [ -z "$actual" ]; fi
@@ -88,6 +93,7 @@ for mode in private host; do
         echo "PASS $mode/$selector: owned ROS tree stopped cleanly; foreign ROS tree alive"
     done
     PATH="$ORIGINAL_PATH" "$SELF/agent_container.sh" down "$TASK"
+    OWN_TARGET=0
     if [ "$mode" = host ]; then unset -f docker; fi
     export PATH="$ORIGINAL_PATH"
 done
