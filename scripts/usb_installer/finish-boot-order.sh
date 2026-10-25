@@ -25,53 +25,53 @@ uuid=$(blkid -s PARTUUID -o value "$esp")
 [ -n "$part" ] && [ -n "$uuid" ] || fail "target ESP has no partition number/UUID"
 [ -f /boot/efi/EFI/BOOT/BOOTAA64.efi ] || fail "target L4T launcher is missing"
 
-# Bypass abbreviated-HD expansion after the r39.2.1 boot failure: require
-# hardware/PCI/NVMe nodes before the exact ESP. This is a compatibility
-# workaround, not a proven L4TLauncher requirement (see the installer README).
-target_entries() {
-    awk -v uuid="$uuid" -v part="$part" '
-        /^Boot[[:xdigit:]]{4}/ {
-            line=tolower($0)
-            path=line
-            sub(/^boot[[:xdigit:]]{4}[* ]*[^\t]*\t/, "", path)
-            if (path ~ /^(pciroot|pcie_root|venhw|acpi|memorymapped)\(/ &&
-                path ~ /\/pci\([^)]*\)\/nvme\([^)]*\)\/hd\(/ &&
-                index(path, "/hd(" part ",gpt," tolower(uuid) ",") &&
-                path ~ /\/file\(\\efi\\boot\\bootaa64[.]efi\)$/)
-                print toupper(substr($0, 5, 4))
-        }' <<<"$1"
-}
-entries=$(efibootmgr -v)
-target=$(target_entries "$entries" | head -n1)
+helper=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/nvme_boot_entry.py
+# Reuse only a binary-verified target before trying either creation method.
+target=$(python3 "$helper" --disk "$disk" --esp "${esp##*/}" --lookup) ||
+    fail "target firmware NVMe prefix could not be validated"
 if [ -z "$target" ]; then
-    efibootmgr -c --full-dev-path -d "/dev/$disk" -p "$part" -l '\EFI\BOOT\BOOTAA64.efi' -L "Robot NVMe"
-    entries=$(efibootmgr -v)
-    target=$(target_entries "$entries" | head -n1)
+    if ! efibootmgr -C --full-dev-path -d "/dev/$disk" -p "$part" -l '\EFI\BOOT\BOOTAA64.efi' -L "Robot NVMe"; then
+        echo "finish-boot-order: full-dev-path unavailable; validating firmware NVMe prefix" >&2
+    fi
 fi
-[ -n "$target" ] || fail "no full PCI/NVMe boot entry matches the installed ESP and L4T launcher"
+# Binary validation also covers entries returned successfully by efibootmgr.
+target=$(python3 "$helper" --disk "$disk" --esp "${esp##*/}") ||
+    fail "no full PCI/NVMe boot entry could be validated"
+[[ $target =~ ^[[:xdigit:]]{4}$ ]] || fail "invalid target boot number"
+entries=$(efibootmgr -v)
 [ "$target" != 00FE ] || fail "target uses the reserved installer boot number"
 
 # Do not delete an unrelated entry if someone reused our reserved number.
 if grep -qi '^Boot00FE' <<<"$entries"; then
     grep -qi '^Boot00FE[* ]*Robot installer (USB)[[:space:]]' <<<"$entries" ||
         fail "Boot00FE is not the temporary robot installer entry"
-    efibootmgr -b 00FE -B
-fi
-if grep -qi '^BootNext: 00FE$' <<<"$entries"; then
-    efibootmgr -N
 fi
 entries=$(efibootmgr -v)
 order=$(sed -n 's/^BootOrder: //p' <<<"$entries")
 new_order=$target
 IFS=, read -r -a previous <<<"$order"
 for entry in "${previous[@]}"; do
-    [ "${entry^^}" = "$target" ] || new_order+=",$entry"
+    [ "${entry^^}" = "$target" ] || [ "${entry^^}" = 00FE ] || new_order+=",$entry"
 done
 efibootmgr -b "$target" -a
+python3 "$helper" --disk "$disk" --esp "${esp##*/}" --verify "$target" >/dev/null ||
+    fail "target failed activation readback"
 efibootmgr -o "$new_order"
 entries=$(efibootmgr -v)
 order=$(sed -n 's/^BootOrder: //p' <<<"$entries")
-[ "${order%%,*}" = "$target" ] || fail "BootOrder update failed"
+[ "${order^^}" = "${new_order^^}" ] || fail "BootOrder update failed"
+python3 "$helper" --disk "$disk" --esp "${esp##*/}" --verify "$target" >/dev/null ||
+    fail "target failed final binary verification"
+if grep -qi '^BootNext: 00FE$' <<<"$entries"; then
+    efibootmgr -N
+fi
+if grep -qi '^Boot00FE' <<<"$entries"; then
+    efibootmgr -b 00FE -B
+fi
+entries=$(efibootmgr -v)
+order=$(sed -n 's/^BootOrder: //p' <<<"$entries")
+[ "${order^^}" = "${new_order^^}" ] || fail "BootOrder changed during USB cleanup"
+! grep -qi '^BootNext: 00FE$' <<<"$entries" || fail "temporary USB BootNext remains"
 ! grep -qi '^Boot00FE' <<<"$entries" || fail "temporary installer entry remains"
-verified=$(target_entries "$entries")
-grep -qx "$target" <<<"$verified" || fail "target lost its full PCI/NVMe device path"
+python3 "$helper" --disk "$disk" --esp "${esp##*/}" --verify "$target" >/dev/null ||
+    fail "target failed final binary verification"

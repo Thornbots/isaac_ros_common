@@ -46,7 +46,7 @@ grep -q 'nooemconfig oem-iso-cfg' "$W/grub.cfg" && grep -q 'default="0>0"' "$W/g
 
 # ── /oemdata: the in-target script, first-boot stage, and this robot's settings
 mkdir -p "$W/oemdata"
-cp "$HERE/oem-iso-cfg.sh" "$HERE/finish-boot-order.sh" "$HERE/robot-firstboot.sh" "$HERE/robot-firstboot.service" "$W/oemdata/"
+cp "$HERE/oem-iso-cfg.sh" "$HERE/finish-boot-order.sh" "$HERE/nvme_boot_entry.py" "$HERE/robot-firstboot.sh" "$HERE/robot-firstboot.service" "$W/oemdata/"
 {
     echo "ROBOT=$ROBOT"
     echo "ROBOT_USER=nano-$ROBOT"

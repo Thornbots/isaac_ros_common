@@ -7,6 +7,7 @@ import shlex
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 import unittest
 
 
@@ -41,6 +42,23 @@ elif cmd == 'lsblk':
     result = s['disk']
 elif cmd == 'blkid':
     result = '12345678-1234-1234-1234-123456789abc'
+elif cmd == 'python3':
+    if '--verify' in a:
+        code = int(s['corrupt_final_path'] and s['abbreviated'] in s['entries'].values())
+    else:
+        candidates = [n for n, value in s['entries'].items()
+                      if '\t' in value
+                      and value.split('\t')[1].endswith(s['abbreviated'].split('\t')[1])
+                      and '/Pci(' in value and '/NVMe(' in value]
+        if candidates:
+            result = candidates[0]
+        elif '--lookup' in a:
+            result = ''
+        elif s['create_fails']:
+            s['entries']['0008'] = s['target']
+            result = '0008'
+        else:
+            code = 1
 elif cmd == 'efibootmgr':
     if a == ['-v']:
         result = 'BootOrder: ' + ','.join(s['order']) + '\n'
@@ -48,17 +66,19 @@ elif cmd == 'efibootmgr':
             result += 'BootNext: ' + s['next'] + '\n'
         for number, path in s['entries'].items():
             result += 'Boot' + number + '* ' + path + '\n'
-    elif '-c' in a:
-        s['entries']['0007'] = (s['target'] if '--full-dev-path' in a
+    elif '-C' in a:
+        code = int(s['create_fails'])
+        if not code:
+            s['entries']['0007'] = (s['target'] if '--full-dev-path' in a
                                 and not s['force_abbreviated'] else s['abbreviated'])
-        s['order'].insert(0, '0007')
     elif '-B' in a:
         del s['entries'][a[1]]
         s['order'] = [n for n in s['order'] if n != a[1]]
     elif a == ['-N']:
         s['next'] = ''
     elif a[0] == '-o':
-        s['order'] = a[1].split(',')
+        if not s['order_write_fails']:
+            s['order'] = a[1].split(',')
         if s['corrupt_final_path']:
             s['entries'][s['order'][0]] = s['abbreviated']
 state_path.write_text(json.dumps(s))
@@ -72,7 +92,8 @@ class BootHandoffTest(unittest.TestCase):
     def run_hook(self, *, existing=True, mounted=True, readonly=False,
                  disk='nvme0n1', reserved='Robot installer (USB)', variables=True,
                  usb=True, bootnext='00FE', missing_loader=False,
-                 existing_path=None, force_abbreviated=False, corrupt_final_path=False):
+                 existing_path=None, force_abbreviated=False, corrupt_final_path=False,
+                 create_fails=False, order_write_fails=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             esp = root / 'esp'
@@ -101,7 +122,8 @@ class BootHandoffTest(unittest.TestCase):
                 'mounted': mounted, 'readonly': readonly, 'disk': disk,
                 'target': target, 'abbreviated': abbreviated,
                 'force_abbreviated': force_abbreviated,
-                'corrupt_final_path': corrupt_final_path,
+                'corrupt_final_path': corrupt_final_path, 'create_fails': create_fails,
+                'order_write_fails': order_write_fails,
             }
             if existing:
                 state['entries']['0003'] = (target if existing_path is None else
@@ -114,10 +136,10 @@ class BootHandoffTest(unittest.TestCase):
             state_path = root / 'state.json'
             state_path.write_text(json.dumps(state))
             mock = root / 'mock'
-            mock.write_text(MOCK)
+            mock.write_text(MOCK.replace('#!/usr/bin/env python3', '#!' + sys.executable))
             mock.chmod(0o755)
             for name in ('mountpoint', 'mount', 'findmnt', 'readlink', 'lsblk',
-                         'blkid', 'efibootmgr'):
+                         'blkid', 'efibootmgr', 'python3'):
                 (root / name).symlink_to(mock)
             source = Path(__file__).resolve().parents[1] / 'scripts/usb_installer'
             script = (source / 'finish-boot-order.sh').read_text()
@@ -126,7 +148,9 @@ class BootHandoffTest(unittest.TestCase):
             script = script.replace('/sys/class/block/${esp##*/}/partition', str(partition))
             env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}",
                        BOOT_TEST_STATE=str(state_path))
-            result = subprocess.run(['bash', '-c', script], env=env,
+            hook = root / 'finish-boot-order.sh'
+            hook.write_text(script)
+            result = subprocess.run(['bash', str(hook)], env=env,
                                     text=True, capture_output=True, check=False)
             return result, json.loads(state_path.read_text())
 
@@ -136,13 +160,19 @@ class BootHandoffTest(unittest.TestCase):
         self.assertEqual(state['order'], ['0003', '0001'])
         self.assertNotIn('00FE', state['entries'])
         self.assertEqual(state['next'], '')
-        self.assertNotIn('-c', [arg for call in state['calls'] for arg in call])
+        self.assertNotIn('-C', [arg for call in state['calls'] for arg in call])
+
+    def test_full_dev_path_failure_uses_validated_fallback(self):
+        result, state = self.run_hook(existing=False, create_fails=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['order'], ['0008', '0001'])
+        self.assertIn('validating firmware NVMe prefix', result.stderr)
 
     def test_missing_entry_is_created_on_target_esp(self):
         result, state = self.run_hook(existing=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(state['order'], ['0007', '0001'])
-        self.assertIn(['efibootmgr', '-c', '--full-dev-path', '-d', '/dev/nvme0n1', '-p', '10',
+        self.assertIn(['efibootmgr', '-C', '--full-dev-path', '-d', '/dev/nvme0n1', '-p', '10',
                        '-l', '\\EFI\\BOOT\\BOOTAA64.efi', '-L', 'Robot NVMe'], state['calls'])
 
     def test_hardware_abbreviated_entry_is_replaced_and_never_promoted(self):
@@ -174,7 +204,7 @@ class BootHandoffTest(unittest.TestCase):
             'PciRoot(0x0)/Pci(0x1,0x0)/NVMe(0x1,0x0)/{hd}'))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(state['order'][0], '0003')
-        self.assertNotIn('-c', [a for c in state['calls'] for a in c])
+        self.assertNotIn('-C', [a for c in state['calls'] for a in c])
 
     def test_full_path_to_other_partition_or_loader_is_rejected(self):
         path = 'Robot NVMe\tPciRoot(0x0)/Pci(0x1,0x0)/NVMe(0x1,0x0)/'
@@ -190,10 +220,18 @@ class BootHandoffTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('00FE', state['entries'])
 
-    def test_final_verification_rechecks_device_path(self):
-        result, _ = self.run_hook(corrupt_final_path=True)
+    def test_order_write_failure_preserves_installer(self):
+        result, state = self.run_hook(order_write_fails=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('target lost its full PCI/NVMe device path', result.stderr)
+        self.assertIn('BootOrder update failed', result.stderr)
+        self.assertIn('00FE', state['entries'])
+        self.assertEqual(state['next'], '00FE')
+
+    def test_final_verification_rechecks_device_path(self):
+        result, state = self.run_hook(corrupt_final_path=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('target failed final binary verification', result.stderr)
+        self.assertIn('00FE', state['entries'])
 
     def test_efivarfs_is_mounted_or_remounted(self):
         for options in ({'mounted': False}, {'readonly': True}):
@@ -276,6 +314,7 @@ else
     touch "$4"
     while [ "$1" != -map ] || [ "$3" != /oemdata ]; do shift; done
     test -f "$2/finish-boot-order.sh"
+    test -f "$2/nvme_boot_entry.py"
     grep -q 'finish-boot-order.sh' "$2/oem-iso-cfg.sh"
     echo 'xorriso : UPDATE : verified OEM boot hook'
 fi
