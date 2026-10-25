@@ -23,11 +23,25 @@ has an `HD()` device path.
 
 The OEM hook runs afterward and calls `finish-boot-order.sh`. It identifies
 the mounted `/boot/efi` ESP, requires it to share the installed root's NVMe,
-and matches its GPT partition UUID plus `EFI/BOOT/BOOTAA64.efi` in the
-firmware entries. If missing, it creates the entry for that exact partition.
+and requires a full hardware/PCI/NVMe device path followed by that ESP's
+partition number, GPT UUID and `EFI/BOOT/BOOTAA64.efi`. If missing, it creates
+that exact partition entry with `efibootmgr --full-dev-path`. An existing
+abbreviated `HD()/File()` entry is preserved but never selected. The hook
+checks the full path again after writing BootOrder.
 It removes the reserved USB entry, clears a remaining USB BootNext, activates
 the target and puts it first while preserving other entries' relative order.
-An unrelated `Boot00FE` causes an error rather than deletion.
+An unrelated `Boot00FE` causes an error rather than deletion. Existing bare
+whole-device entries (including the recovery entry) are preserved.
+
+Full-path creation bypasses abbreviated-HD expansion as a compatibility
+workaround for the observed post-capsule r39.2.1 failure. NVIDIA's
+[boot manager supports abbreviated HD paths](https://github.com/NVIDIA/edk2/blob/5acf429321649bc191baf19de19670216a75cfb0/MdeModulePkg/Library/UefiBootManagerLib/BmBoot.c#L1002-L1013).
+[L4TLauncher discovers rootfs through parent/child handles and GPT partition names](https://github.com/NVIDIA/edk2-nvidia/blob/7e9f9ec4de8d979807683a7b4605a15ec3299b89/Silicon/NVIDIA/Application/L4TLauncher/L4TLauncher.c#L353-L428),
+not a required raw boot-entry prefix. Its
+[partition-info error precedes opening extlinux.conf](https://github.com/NVIDIA/edk2-nvidia/blob/7e9f9ec4de8d979807683a7b4605a15ec3299b89/Silicon/NVIDIA/Application/L4TLauncher/L4TLauncher.c#L1301-L1313).
+Hardware acceptance must confirm the actual on-disk launcher build, rootfs GPT
+`PARTLABEL` (`APP` or its slot variants), and successful extlinux loading with
+the full entry. A capsule upgrade alone does not identify the on-disk launcher.
 
 The ISO initramfs mounts `efivarfs` read-write; curtin normally exposes `/sys`
 in the target. The hook checks the target mount, mounts/remounts `efivarfs`
@@ -37,7 +51,7 @@ service cannot fix a loop that prevents the target from booting. Other disk
 layouts, encrypted roots and other installer versions need explicit review.
 
 Host regression tests use fake firmware and block-device commands; they do
-not validate firmware persistence or a physical installation:
+not validate firmware persistence, curtin runtime mounts, or a physical installation:
 
 ```sh
 python3 -m unittest discover -s tests -p test_usb_installer.py -v

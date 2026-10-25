@@ -25,24 +25,30 @@ uuid=$(blkid -s PARTUUID -o value "$esp")
 [ -n "$part" ] && [ -n "$uuid" ] || fail "target ESP has no partition number/UUID"
 [ -f /boot/efi/EFI/BOOT/BOOTAA64.efi ] || fail "target L4T launcher is missing"
 
-# efibootmgr -v may print a full device path or an abbreviated HD() path.
+# Bypass abbreviated-HD expansion after the r39.2.1 boot failure: require
+# hardware/PCI/NVMe nodes before the exact ESP. This is a compatibility
+# workaround, not a proven L4TLauncher requirement (see the installer README).
 target_entries() {
-    awk -v uuid="$uuid" '
+    awk -v uuid="$uuid" -v part="$part" '
         /^Boot[[:xdigit:]]{4}/ {
             line=tolower($0)
-            if (index(line, ",gpt," tolower(uuid) ",") &&
-                index(line, "file(\\efi\\boot\\bootaa64.efi)"))
+            path=line
+            sub(/^boot[[:xdigit:]]{4}[* ]*[^\t]*\t/, "", path)
+            if (path ~ /^(pciroot|pcie_root|venhw|acpi|memorymapped)\(/ &&
+                path ~ /\/pci\([^)]*\)\/nvme\([^)]*\)\/hd\(/ &&
+                index(path, "/hd(" part ",gpt," tolower(uuid) ",") &&
+                path ~ /\/file\(\\efi\\boot\\bootaa64[.]efi\)$/)
                 print toupper(substr($0, 5, 4))
         }' <<<"$1"
 }
 entries=$(efibootmgr -v)
 target=$(target_entries "$entries" | head -n1)
 if [ -z "$target" ]; then
-    efibootmgr -c -d "/dev/$disk" -p "$part" -l '\EFI\BOOT\BOOTAA64.efi' -L "Robot NVMe"
+    efibootmgr -c --full-dev-path -d "/dev/$disk" -p "$part" -l '\EFI\BOOT\BOOTAA64.efi' -L "Robot NVMe"
     entries=$(efibootmgr -v)
     target=$(target_entries "$entries" | head -n1)
 fi
-[ -n "$target" ] || fail "no boot entry matches the installed ESP and L4T launcher"
+[ -n "$target" ] || fail "no full PCI/NVMe boot entry matches the installed ESP and L4T launcher"
 [ "$target" != 00FE ] || fail "target uses the reserved installer boot number"
 
 # Do not delete an unrelated entry if someone reused our reserved number.
@@ -67,3 +73,5 @@ entries=$(efibootmgr -v)
 order=$(sed -n 's/^BootOrder: //p' <<<"$entries")
 [ "${order%%,*}" = "$target" ] || fail "BootOrder update failed"
 ! grep -qi '^Boot00FE' <<<"$entries" || fail "temporary installer entry remains"
+verified=$(target_entries "$entries")
+grep -qx "$target" <<<"$verified" || fail "target lost its full PCI/NVMe device path"

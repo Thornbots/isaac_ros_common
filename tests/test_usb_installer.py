@@ -49,7 +49,8 @@ elif cmd == 'efibootmgr':
         for number, path in s['entries'].items():
             result += 'Boot' + number + '* ' + path + '\n'
     elif '-c' in a:
-        s['entries']['0007'] = s['target']
+        s['entries']['0007'] = (s['target'] if '--full-dev-path' in a
+                                and not s['force_abbreviated'] else s['abbreviated'])
         s['order'].insert(0, '0007')
     elif '-B' in a:
         del s['entries'][a[1]]
@@ -58,6 +59,8 @@ elif cmd == 'efibootmgr':
         s['next'] = ''
     elif a[0] == '-o':
         s['order'] = a[1].split(',')
+        if s['corrupt_final_path']:
+            s['entries'][s['order'][0]] = s['abbreviated']
 state_path.write_text(json.dumps(s))
 if result:
     print(result)
@@ -68,7 +71,8 @@ sys.exit(code)
 class BootHandoffTest(unittest.TestCase):
     def run_hook(self, *, existing=True, mounted=True, readonly=False,
                  disk='nvme0n1', reserved='Robot installer (USB)', variables=True,
-                 usb=True, bootnext='00FE', missing_loader=False):
+                 usb=True, bootnext='00FE', missing_loader=False,
+                 existing_path=None, force_abbreviated=False, corrupt_final_path=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             esp = root / 'esp'
@@ -81,21 +85,28 @@ class BootHandoffTest(unittest.TestCase):
             variables_path = root / 'efivars'
             if variables:
                 variables_path.mkdir()
-            target = ('NVMe L4T\tHD(10,GPT,12345678-1234-1234-1234-123456789ABC,'
-                      '0x1000,0x2000)/File(\\EFI\\BOOT\\BOOTAA64.efi)')
+            abbreviated = ('Robot NVMe\tHD(10,GPT,12345678-1234-1234-1234-123456789ABC,'
+                           '0x1000,0x2000)/File(\\EFI\\BOOT\\BOOTAA64.efi)')
+            target = abbreviated.replace('\tHD(',
+                                         '\tPciRoot(0x0)/Pci(0x1,0x0)/'
+                                         'NVMe(0x1,00-11-22-33-44-55-66-77)/HD(')
             state = {
                 'entries': {
                     '00FE': reserved + '\tHD(1,GPT,usb-guid,0x1,0x2)/File('
                     '\\EFI\\BOOT\\grubaa64.efi)',
-                    '0001': 'Other NVMe\tHD(10,GPT,other-guid,0x1,0x2)/File('
-                    '\\EFI\\BOOT\\BOOTAA64.efi)',
+                    '0001': 'UEFI NVMe\tPciRoot(0x0)/Pci(0x1,0x0)/'
+                    'NVMe(0x1,00-11-22-33-44-55-66-77)',
                 },
                 'order': ['00FE', '0001'], 'next': bootnext, 'calls': [],
                 'mounted': mounted, 'readonly': readonly, 'disk': disk,
-                'target': target,
+                'target': target, 'abbreviated': abbreviated,
+                'force_abbreviated': force_abbreviated,
+                'corrupt_final_path': corrupt_final_path,
             }
             if existing:
-                state['entries']['0003'] = target
+                state['entries']['0003'] = (target if existing_path is None else
+                                          existing_path.replace('{abbreviated}', abbreviated)
+                                          .replace('{hd}', abbreviated.split('\t')[1]))
                 state['order'].append('0003')
             if not usb:
                 del state['entries']['00FE']
@@ -131,8 +142,58 @@ class BootHandoffTest(unittest.TestCase):
         result, state = self.run_hook(existing=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(state['order'], ['0007', '0001'])
-        self.assertIn(['efibootmgr', '-c', '-d', '/dev/nvme0n1', '-p', '10',
+        self.assertIn(['efibootmgr', '-c', '--full-dev-path', '-d', '/dev/nvme0n1', '-p', '10',
                        '-l', '\\EFI\\BOOT\\BOOTAA64.efi', '-L', 'Robot NVMe'], state['calls'])
+
+    def test_hardware_abbreviated_entry_is_replaced_and_never_promoted(self):
+        result, state = self.run_hook(existing_path='{abbreviated}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['order'], ['0007', '0001', '0003'])
+        self.assertIn('0003', state['entries'])
+        self.assertIn('--full-dev-path', [a for c in state['calls'] for a in c])
+
+    def test_successful_write_of_abbreviated_path_is_rejected(self):
+        result, state = self.run_hook(existing_path='{abbreviated}', force_abbreviated=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('no full PCI/NVMe boot entry', result.stderr)
+        self.assertIn('00FE', state['entries'])
+        self.assertFalse(any(c[0] == 'efibootmgr' and c[1] in ('-o', '-a', '-B', '-N')
+                             for c in state['calls'] if len(c) > 1))
+
+    def test_incomplete_device_paths_are_rejected(self):
+        for prefix in ('NVMe(0x1,0x0)/', 'PciRoot(0x0)/Pci(0x1,0x0)/'):
+            with self.subTest(prefix=prefix):
+                result, state = self.run_hook(existing_path='Robot NVMe\t' + prefix + '{hd}',
+                                              force_abbreviated=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('00FE', state['entries'])
+
+    def test_vendor_hardware_prefix_is_accepted(self):
+        result, state = self.run_hook(existing_path=(
+            'UEFI NVMe\tVenHw(12345678-1234-1234-1234-123456789abc)/'
+            'PciRoot(0x0)/Pci(0x1,0x0)/NVMe(0x1,0x0)/{hd}'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['order'][0], '0003')
+        self.assertNotIn('-c', [a for c in state['calls'] for a in c])
+
+    def test_full_path_to_other_partition_or_loader_is_rejected(self):
+        path = 'Robot NVMe\tPciRoot(0x0)/Pci(0x1,0x0)/NVMe(0x1,0x0)/'
+        for suffix in (
+                'HD(1,GPT,12345678-1234-1234-1234-123456789abc,0x1,0x2)/'
+                'File(\\EFI\\BOOT\\BOOTAA64.efi)',
+                'HD(10,GPT,other-guid,0x1,0x2)/File(\\EFI\\BOOT\\BOOTAA64.efi)',
+                'HD(10,GPT,12345678-1234-1234-1234-123456789abc,0x1,0x2)/'
+                'File(\\EFI\\BOOT\\grubaa64.efi)'):
+            with self.subTest(suffix=suffix):
+                result, state = self.run_hook(existing_path=path + suffix,
+                                              force_abbreviated=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('00FE', state['entries'])
+
+    def test_final_verification_rechecks_device_path(self):
+        result, _ = self.run_hook(corrupt_final_path=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('target lost its full PCI/NVMe device path', result.stderr)
 
     def test_efivarfs_is_mounted_or_remounted(self):
         for options in ({'mounted': False}, {'readonly': True}):
