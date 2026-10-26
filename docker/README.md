@@ -43,9 +43,10 @@ scratch, which takes much longer.
 ### Pulling from GitHub Container Registry
 
 The workspace's `publish robot image` workflow builds the JetPack arm64
-image on GitHub after pushes to `main` or `nightly`. It runs package tests
-before publishing. Each build has an immutable workspace revision tag and a
-branch tag:
+image on GitHub for pushes and PRs into `main`, plus manual dispatch. It runs
+package tests before publishing; PRs build and test without publishing robot
+tags. See the [robot registry](../../docs/CI.md#robot-registry) for publication
+rules and tags. For the published `main` image:
 
 ```sh
 docker pull ghcr.io/thornbots/isaac-ros:main-arm64-jetpack
