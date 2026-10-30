@@ -6,7 +6,6 @@
 # (headless), isaac-ros-startup's boot service, tailscale login, then
 # MAXN_SUPER and one reboot. Safe to re-run. After it: log in again,
 # `isaac-ros activate --build-local` once, and the service starts at boot.
-# see JAZZY_FLASH.md for design rationale
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive   # robot-firstboot runs this with no terminal
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
@@ -45,6 +44,12 @@ elif [ -t 0 ]; then
 else
     echo "tailscale not logged in and no terminal: later run" \
         "sudo tailscale up --ssh --hostname ts-$(hostname | sed 's/^ts-//') --advertise-tags=tag:jetsons"
+fi
+
+# Firstboot supplies this optional marker; failed setup must remain resumable.
+# Write it before nvpmodel, which may reboot without returning to the caller.
+if [ -n "${ROBOT_SETUP_COMPLETE_FILE:-}" ]; then
+    touch -- "$ROBOT_SETUP_COMPLETE_FILE"
 fi
 
 log "MAXN_SUPER and reboot"

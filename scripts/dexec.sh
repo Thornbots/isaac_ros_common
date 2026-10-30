@@ -34,8 +34,8 @@
 #   -r        run as root instead of admin (needed for apt-get etc.)
 #   -d        detach (docker exec -d) -- for launches you want left running;
 #             wrapped in `setsid` so the launch becomes its own process
-#             group leader, letting kill_launch.sh clean it up properly
-#             later (see that script for why this matters)
+#             group leader for isolation from the exec session;
+#             kill_launch.sh verifies ownership before stopping descendants
 #   -w DIR    override workdir (default /workspaces/isaac_ros-dev)
 #
 # Container name and user: see container.sh.
@@ -75,14 +75,12 @@ if [ "$#" -eq 0 ]; then
 fi
 
 # Preflight: `docker exec` against a stopped/absent container fails with a
-# raw daemon error that doesn't say what to do about it. Note this script
-# never starts or builds anything itself -- launching the container is the
-# user's call (see the skill's "Never build the image yourself" note).
+# raw daemon error that doesn't say what to do about it. This script never
+# starts anything itself; agent_container.sh creates the per-agent container.
 if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
     echo "dexec.sh: container '$CONTAINER' is not running." >&2
-    echo "  Ask the user to start it:  isaac-ros activate  (with ISAAC_ROS_WS set)" >&2
-    echo "  (on a Mac: the docker run in isaac_ros_common/docker/README.md)" >&2
-    echo "  (or set ISAAC_ROS_CONTAINER if the name differs)" >&2
+    echo "  Create your own:  $(dirname "$0")/agent_container.sh up <task>" >&2
+    echo "  then export ISAAC_ROS_CONTAINER=isaac-agent-<task> (see the isaac-ros-docker skill)" >&2
     exit 1
 fi
 
@@ -115,7 +113,9 @@ CMD="$(printf '%q ' "$@")"
 # onto the value. Verified 2026-07-26.
 # Both workspace installs are optional: a fresh workspace has none until its
 # first colcon build, and the Mac image has no ros2_ws.
-SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && { [ ! -f /workspaces/ros2_ws/install/setup.bash ] || source /workspaces/ros2_ws/install/setup.bash ; } && { [ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash ; } ; } >/dev/null"
+# /etc/bash.bashrc hardcodes ROS_DOMAIN_ID=1, so an agent container
+# (agent_container.sh) re-asserts its own domain and gz partition afterwards.
+SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && { [ ! -f /workspaces/ros2_ws/install/setup.bash ] || source /workspaces/ros2_ws/install/setup.bash ; } && { [ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash ; } ; [ -z \"\${THORNBOTS_ROS_DOMAIN_ID:-}\" ] || export ROS_DOMAIN_ID=\$THORNBOTS_ROS_DOMAIN_ID GZ_PARTITION=\$THORNBOTS_GZ_PARTITION ; } >/dev/null"
 
 if [ "$DETACH" -eq 1 ]; then
     # $$ is the HOST shell's pid, expanded here before the string is sent
@@ -125,9 +125,8 @@ if [ "$DETACH" -eq 1 ]; then
     # an `echo` on the container side (as this used to do) is never seen by
     # the caller.
     LOG="/tmp/dexec_$$.log"
-    # setsid so the whole launch tree shares one process group, separate
-    # from this docker exec's own -- kill_launch.sh needs that to clean up
-    # the entire tree with one SIGINT instead of missing orphaned children.
+    # Keep the detached command in its own session. kill_launch.sh selects
+    # ROS roots by container ownership and signals verified descendants.
     docker exec -d -u "$USERNAME" --workdir "$WORKDIR" "$CONTAINER" \
         bash -lc "$SOURCE_ENV && setsid nohup $CMD > $LOG 2>&1 < /dev/null & disown"
     echo "started detached in $CONTAINER (log: $LOG)"

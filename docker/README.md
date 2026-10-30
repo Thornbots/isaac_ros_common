@@ -42,10 +42,9 @@ scratch, which takes much longer.
 
 ### Pulling from GitHub Container Registry
 
-The workspace's `publish robot image` workflow builds the JetPack arm64
-image on GitHub after pushes to `main` or `nightly`. It runs package tests
-before publishing. Each build has an immutable workspace revision tag and a
-branch tag:
+See the [robot registry](../../docs/CI.md#robot-registry) for nightly and
+release publication, test gates, tags and authentication. For the published
+`main` image:
 
 ```sh
 docker pull ghcr.io/thornbots/isaac-ros:main-arm64-jetpack
@@ -61,15 +60,8 @@ isaac-ros activate
 
 The pull script never starts a container or builds an image. It computes the
 CLI's local tag, pulls `sha-<workspace SHA>-arm64-jetpack`, and retags it.
-Wait for the workflow to finish before pulling a new revision. The image is
-for JetPack robots; it does not include Gazebo or the simulation package.
-
-The workflow uses `GITHUB_TOKEN` with `packages: write`; no registry password
-secret is needed. GitHub initially creates packages as private. An org
-administrator must grant teammates read access or make the package public.
-For private access, authenticate to `ghcr.io` with a token that has
-`read:packages` before pulling. Build/test failure prevents publishing a new
-branch tag. Logs and the workflow summary identify the exact source revision.
+Wait for [publication](../../docs/CI.md#robot-registry) before pulling a new
+revision. The image is for JetPack robots; it does not include Gazebo or the simulation package.
 
 Each robot builds its own image, on wall power: run
 `src/isaac_ros_common/scripts/build_robot_image.sh` on it with no host
@@ -173,8 +165,8 @@ running container instead.
 
 The Humble image sat at 127 of overlay2's ~128 layers on aarch64, 25 of them
 from this file. On x86_64 (2026-09-26) the Jazzy image is 42: `isaac_ros` 25,
-`realsense` 9, this file 8 (the four above plus a 4 kB `WORKDIR`). Check
-headroom with
+`realsense` 9, this file 8 (the seven `RUN`/`COPY` steps behind the four
+rows above, plus a 4 kB `WORKDIR`). Check headroom with
 `docker inspect <image> --format '{{len .RootFS.Layers}}'`.
 
 ## rosdep and `--skip-keys`
@@ -204,7 +196,7 @@ shipped no `libdiagnostic_updater.so`. Jazzy ships 4.2.x, so the pin is gone.
 - `udev_rules/98-rplidar.rules` and `scripts/hotplug-rplidar.sh` go to
   `/etc/udev/rules.d/` and `/opt/rplidar/`.
 - `/etc/bash.bashrc` gets `ROS_DOMAIN_ID` (build arg, default 1 until the
-  Jazzy cutover), the FastDDS profile, `rmw_fastrtps_cpp`, and the Jazzy and
+  [domain-0 switch](../../docs/ROADMAP.md#later-needs-a-robot)), the FastDDS profile, `rmw_fastrtps_cpp`, and the Jazzy and
   `ros2_ws` setup files.
 
 ## `sim` is deliberately not in the image
@@ -254,7 +246,10 @@ docker run -d --name isaac_ros_jazzy_container --restart unless-stopped --shm-si
 
 The workspace is the directory holding `src/`: mount the git checkout, not
 a copy, or edits never reach the container. The name matches
-`.isaac-ros-cli/config.yaml`, so `dexec.sh` and friends find it. Then:
+`.isaac-ros-cli/config.yaml`, so `dexec.sh` and friends find it. This is the
+user's long-lived container; agents use `scripts/agent_container.sh` instead
+([skill](../../.claude/skills/isaac-ros-docker/SKILL.md#your-own-container)).
+Then:
 
 ```sh
 docker exec -it isaac_ros_jazzy_container bash
@@ -282,3 +277,115 @@ answering ssh.
 `--base-paths` leaves out `realsense-yolov8-nitros-bridge` (it needs Isaac
 ROS) and `isaac_ros_common`'s upstream packages. `Dockerfile.mac.dockerignore`
 keeps the YOLO bridge's manifest out of rosdep for the same reason.
+
+# Windows (WSL2)
+
+Untested end to end. Requires an x86_64 machine with an NVIDIA GPU. Docker
+Desktop runs the engine on WSL2, and everything below the Windows steps runs
+in an Ubuntu 24.04 WSL shell, not PowerShell.
+
+## Windows side
+
+In an admin PowerShell, then reboot and open **Ubuntu 24.04** from the
+Start menu once to create your Linux user:
+
+```powershell
+wsl --install -d Ubuntu-24.04
+winget install -e --id Docker.DockerDesktop
+nvidia-smi          # the GPU and a current NVIDIA Windows driver
+```
+
+Install only the Windows NVIDIA driver; never a Linux driver inside WSL.
+
+WSL2's VM settings, which Docker Desktop's engine shares, live in
+`.wslconfig` in your Windows home folder (`C:\Users\<you>\.wslconfig`).
+It doesn't exist by default. Create it from PowerShell and answer yes when
+Notepad offers to create the file:
+
+```powershell
+notepad "$env:USERPROFILE\.wslconfig"
+```
+
+Paste this, save, and close Notepad:
+
+```ini
+[wsl2]
+# image builds; the default is half of RAM
+memory=24GB
+# WSL shares Windows' interfaces, tailscale included
+networkingMode=mirrored
+```
+
+Check the name (File Explorer can save it as `.wslconfig.txt`, which WSL
+ignores), then restart WSL to apply it:
+
+```powershell
+dir "$env:USERPROFILE\.wslconfig"
+wsl --shutdown
+```
+
+This is not `/etc/wsl.conf`, which configures one distro from inside it.
+
+In Docker Desktop settings:
+
+- General: **Use the WSL 2 based engine**.
+- Resources > WSL integration: enable **Ubuntu-24.04**.
+- Resources > Network: **Enable host networking**. The CLI starts the
+  container with `--network host`, which DDS needs.
+
+## Ubuntu (WSL) side
+
+Check that `docker` and the GPU reach the distro:
+
+```bash
+nvidia-smi
+docker run --rm --gpus all ubuntu nvidia-smi
+```
+
+Clone on WSL's own filesystem, never under `/mnt/c` or with Git for
+Windows: CRLF breaks the scripts, `setup_workspace.sh` needs symlinks, and
+`/mnt/c` bind mounts are slow.
+
+```bash
+sudo apt-get update && sudo apt-get install -y git curl usbutils
+mkdir -p ~/workspaces/isaac_ros-jazzy && cd ~/workspaces/isaac_ros-jazzy
+git clone --recurse-submodules https://github.com/Thornbots/thornbots_workspace.git src
+```
+
+Install the CLI ([`install_isaac_ros_cli.sh`](../scripts/install_isaac_ros_cli.sh)
+needs `uv`), link our config, and build and start the image:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.local/bin/env
+src/isaac_ros_common/scripts/install_isaac_ros_cli.sh
+src/isaac_ros_common/scripts/setup_workspace.sh
+echo 'export ISAAC_ROS_WS=~/workspaces/isaac_ros-jazzy' >> ~/.bashrc
+source ~/.bashrc
+touch ~/.Xauthority     # the CLI bind-mounts it; if missing, Docker makes a directory
+isaac-ros activate --build-local
+```
+
+The first build compiles librealsense, roughly half an hour. Later, start
+the container with `isaac-ros activate` (see [Building](#building) for
+rebuilding after package edits). Running `isaac-ros activate` again from
+another WSL shell attaches a second shell to the running container.
+
+WSLg supplies `DISPLAY` for rviz and gz. If they fail to open, watch in
+Foxglove on `ws://localhost:8765`.
+
+## USB devices
+
+RealSense, rplidar and the MCB reach WSL through
+[usbipd-win](https://learn.microsoft.com/en-us/windows/wsl/connect-usb).
+In an admin PowerShell, after each replug:
+
+```powershell
+winget install usbipd      # once
+usbipd list                # find the BUSID
+usbipd bind --busid 2-3    # once per device
+usbipd attach --wsl --busid 2-3
+```
+
+Then `lsusb` in WSL lists it. RealSense streaming over usbip is unreliable;
+use a Linux host for camera work.
