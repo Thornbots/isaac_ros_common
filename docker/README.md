@@ -42,11 +42,9 @@ scratch, which takes much longer.
 
 ### Pulling from GitHub Container Registry
 
-The workspace's `publish robot image` workflow builds the JetPack arm64
-image on GitHub for pushes and PRs into `main`, plus manual dispatch. It runs
-package tests before publishing; PRs build and test without publishing robot
-tags. See the [robot registry](../../docs/CI.md#robot-registry) for publication
-rules and tags. For the published `main` image:
+See the [robot registry](../../docs/CI.md#robot-registry) for nightly and
+release publication, test gates, tags and authentication. For the published
+`main` image:
 
 ```sh
 docker pull ghcr.io/thornbots/isaac-ros:main-arm64-jetpack
@@ -62,15 +60,8 @@ isaac-ros activate
 
 The pull script never starts a container or builds an image. It computes the
 CLI's local tag, pulls `sha-<workspace SHA>-arm64-jetpack`, and retags it.
-Wait for the workflow to finish before pulling a new revision. The image is
-for JetPack robots; it does not include Gazebo or the simulation package.
-
-The workflow uses `GITHUB_TOKEN` with `packages: write`; no registry password
-secret is needed. GitHub initially creates packages as private. An org
-administrator must grant teammates read access or make the package public.
-For private access, authenticate to `ghcr.io` with a token that has
-`read:packages` before pulling. Build/test failure prevents publishing a new
-branch tag. Logs and the workflow summary identify the exact source revision.
+Wait for [publication](../../docs/CI.md#robot-registry) before pulling a new
+revision. The image is for JetPack robots; it does not include Gazebo or the simulation package.
 
 Each robot builds its own image, on wall power: run
 `src/isaac_ros_common/scripts/build_robot_image.sh` on it with no host
