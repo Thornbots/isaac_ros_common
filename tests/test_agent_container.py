@@ -133,6 +133,7 @@ class AgentContainerTest(unittest.TestCase):
         self.assertIn('/artifacts/install:/workspaces/isaac_ros-dev/install', calls)
         self.assertIn('/artifacts/log:/workspaces/isaac_ros-dev/log', calls)
         self.assertIn('env -i HOME=/home/admin', calls)
+        self.assertIn('ROS_DOMAIN_ID=100 GZ_PARTITION=agent-fixture-100', calls)
         self.assertNotIn('volume create', calls)
         self.assertNotIn('volume rm', calls)
         self.assertIn('rm -f -v owned-id', calls)

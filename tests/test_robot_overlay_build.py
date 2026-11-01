@@ -48,6 +48,7 @@ class OverlayBuildTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls[0], 'jazzy')
         self.assertIn('--packages-select ' + ' '.join(PACKAGES), calls[1])
+        self.assertIn('-DCMAKE_CUDA_ARCHITECTURES=87', calls[1])
         self.assertIn('MAKEFLAGS=-j2 build --parallel-workers 2 --symlink-install', calls[1])
         self.assertIn('--symlink-install --base-paths src/sllidar_ros2', calls[1])
         self.assertEqual(calls[2], 'overlay')

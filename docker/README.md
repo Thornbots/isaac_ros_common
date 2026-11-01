@@ -72,6 +72,16 @@ build/activation remains the separate workflow described above.
 The pinned image retains its CI-tested baked application in
 `/workspaces/ros2_ws` as the startup baseline fallback.
 
+The image supplies Ubuntu/ROS/Isaac ROS, CUDA/TensorRT, the custom RealSense
+build, compilers, all rosdep-resolved dependencies, DDS/camera/udev setup and
+container entry helpers. The overlay owns all seven application packages,
+including generated messages, binaries, Python modules, launch files and
+package configuration. Build them together so interface changes cannot leave
+a baked consumer using an older message ABI. Model assets, maps and recorded
+logs stay on the host workspace/data mounts. If a base update changes
+TensorRT/CUDA compatibility, regenerate the cached engine from the preserved
+ONNX before relying on it; colcon does not rebuild TensorRT engines.
+
 Compatibility compares every non-document file and symlink in the checkout's
 `isaac_ros_common/docker/` (including the Dockerfile, excluding README/Markdown docs) against
 `/opt/thornbots/docker`, plus all seven `package.xml` files against the image's
@@ -90,7 +100,8 @@ covers the Thornbots Docker inputs and package manifests only.
 Both `--check` and build run without network access or automatic image pulls.
 The build uses only `/opt/ros/jazzy` as its underlay, explicitly selects all
 seven robot packages, caps compilation at two colcon workers with
-`MAKEFLAGS=-j2`, and never installs dependencies. It uses an isolated,
+`MAKEFLAGS=-j2`, selects the image CUDA compiler and Orin `sm_87` architecture
+explicitly, and never installs dependencies. It uses an isolated,
 task-owned container, removed on exit, through `agent_container.sh`. On
 build-only CI hosts without a GPU, set `ISAAC_AGENT_GPU=none`; robots retain
 the default GPU runtime injection. Host

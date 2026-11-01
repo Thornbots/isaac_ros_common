@@ -309,10 +309,14 @@ cmd_run() {
     cmd_up "$task" ${opts[@]+"${opts[@]}"} || exit 1
     # Bash defers traps during a foreground external command; wait is interruptible.
     if [ "$CLEAN_EXEC" -eq 1 ]; then
-        local exec_user=admin exec_home=/home/admin
+        local exec_user=admin exec_home=/home/admin exec_domain exec_partition
+        exec_domain="$(label_of "$OWN_CONTAINER" thornbots.domain)"
+        exec_partition="$(label_of "$OWN_CONTAINER" thornbots.partition)"
         if [ "$OS" = Darwin ]; then exec_user=root; exec_home=/root; fi
         docker exec -i -u "$exec_user" --workdir /workspaces/isaac_ros-dev "$OWN_CONTAINER" \
             env -i HOME="$exec_home" PATH=/usr/local/bin:/usr/bin:/bin \
+            ROS_DOMAIN_ID="$exec_domain" GZ_PARTITION="$exec_partition" \
+            THORNBOTS_ROS_DOMAIN_ID="$exec_domain" THORNBOTS_GZ_PARTITION="$exec_partition" \
             bash --noprofile --norc -c 'exec "$@"' bash "$@" <&0 &
     else
         ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@" <&0 &
