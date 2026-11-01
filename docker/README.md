@@ -89,8 +89,8 @@ covers the Thornbots Docker inputs and package manifests only.
 
 Both `--check` and build run without network access or automatic image pulls.
 The build uses only `/opt/ros/jazzy` as its underlay, explicitly selects all
-seven robot packages, caps compilation at three colcon workers with
-`MAKEFLAGS=-j6`, and never installs dependencies. It uses an isolated,
+seven robot packages, caps compilation at two colcon workers with
+`MAKEFLAGS=-j2`, and never installs dependencies. It uses an isolated,
 task-owned container, removed on exit, through `agent_container.sh`. On
 build-only CI hosts without a GPU, set `ISAAC_AGENT_GPU=none`; robots retain
 the default GPU runtime injection. Host
