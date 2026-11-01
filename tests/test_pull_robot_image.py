@@ -60,6 +60,8 @@ class PullRobotImageTest(unittest.TestCase):
             self.assertIn('pull ghcr.io/thornbots/isaac-ros:' + tag,
                           self.docker_log.read_text())
             self.assertIn('-n -z -- python3', self.docker_log.read_text())
+            self.assertIn(f'tag {self.image} thornbots-robot-base:{self.image[7:]}',
+                          self.docker_log.read_text())
 
     def test_pull_or_contract_failure_preserves_pin(self):
         pin = self.workspace / '.robot-image'

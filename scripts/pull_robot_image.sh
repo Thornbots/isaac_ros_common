@@ -11,6 +11,8 @@ REF="ghcr.io/thornbots/isaac-ros:$TAG"
 docker pull "$REF"
 IMAGE="$(docker image inspect --format '{{.Id}}' "$REF")"
 "$SCRIPT_DIR/check_robot_image.sh" "$IMAGE"
+# Keep the prepared image tagged even when the remote nightly tag moves.
+docker tag "$IMAGE" "thornbots-robot-base:${IMAGE#sha256:}"
 TEMP="$(mktemp "$WS/.robot-image.XXXXXXXX")"
 trap 'rm -f "$TEMP"' EXIT
 printf '%s\n' "$IMAGE" > "$TEMP"

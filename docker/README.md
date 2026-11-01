@@ -62,7 +62,10 @@ src/isaac_ros_common/scripts/build_robot_overlay.sh
 ```
 
 The pull helper resolves the tag to an immutable local Docker image ID, checks
-compatibility, then atomically writes `<workspace>/.robot-image`. Failed pulls
+compatibility, retains it under `thornbots-robot-base:<image-ID>` to protect
+it from dangling-image pruning when nightly moves, then atomically writes
+`<workspace>/.robot-image`. Remove retired local base tags explicitly only
+after confirming no prepared workspace needs them. Failed pulls
 or checks preserve the previous pin. The workspace is the parent of this
 checkout's `src/` directory; state and artifacts are local, outside Git.
 This is the robot startup interface: the helper no longer retags the CLI image
