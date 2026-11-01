@@ -50,20 +50,90 @@ release publication, test gates, tags and authentication. For the published
 docker pull ghcr.io/thornbots/isaac-ros:main-arm64-jetpack
 ```
 
-For `isaac-ros activate`, first update the robot's checkout and its package
-gitlinks, then pull and retag the image for that exact workspace revision:
+Robots normally pull a tested nightly image occasionally while online, then
+build their current checkout as an offline overlay:
 
 ```sh
 src/isaac_ros_common/scripts/pull_robot_image.sh
-isaac-ros activate
+# Optional exact registry tag instead of nightly-arm64-jetpack:
+# src/isaac_ros_common/scripts/pull_robot_image.sh sha-<workspace-SHA>-arm64-jetpack
+src/isaac_ros_common/scripts/build_robot_overlay.sh --check
+src/isaac_ros_common/scripts/build_robot_overlay.sh
 ```
 
-The pull script never starts a container or builds an image. It computes the
-CLI's local tag, pulls `sha-<workspace SHA>-arm64-jetpack`, and retags it.
-Wait for [publication](../../docs/CI.md#robot-registry) before pulling a new
-revision. The image is for JetPack robots; it does not include Gazebo or the simulation package.
+The pull helper resolves the tag to an immutable local Docker image ID, checks
+compatibility, retains it under `thornbots-robot-base:<image-ID>` to protect
+it from dangling-image pruning when nightly moves, then atomically writes
+`<workspace>/.robot-image`. Remove retired local base tags explicitly only
+after confirming no prepared workspace needs them. Failed pulls
+or checks preserve the previous pin. The workspace is the parent of this
+checkout's `src/` directory; state and artifacts are local, outside Git.
+This is the robot startup interface: the helper no longer retags the CLI image
+name, and `isaac-ros activate` does not consume `.robot-image` or select this
+overlay. Use the robot startup service for this workflow. Developer CLI image
+build/activation remains the separate workflow described above.
+The pinned image retains its CI-tested baked application in
+`/workspaces/ros2_ws` as the startup baseline fallback.
 
-Each robot builds its own image, on wall power: run
+The image supplies Ubuntu/ROS/Isaac ROS, CUDA/TensorRT, the custom RealSense
+build, compilers, all rosdep-resolved dependencies, DDS/camera/udev setup and
+container entry helpers. The overlay owns all seven application packages,
+including generated messages, binaries, Python modules, launch files and
+package configuration. Build them together so interface changes cannot leave
+a baked consumer using an older message ABI. Model assets, maps and recorded
+logs stay on the host workspace/data mounts. If a base update changes
+TensorRT/CUDA compatibility, regenerate the cached engine from the preserved
+ONNX before relying on it; colcon does not rebuild TensorRT engines.
+
+Compatibility compares every non-document file and symlink in the checkout's
+`isaac_ros_common/docker/` (including the Dockerfile, excluding README/Markdown docs) against
+`/opt/thornbots/docker`, plus all seven `package.xml` files against the image's
+`/workspaces/ros2_ws/src`. This works with existing published images without
+new labels or Dockerfile changes. Source and helper changes outside `docker/`
+do not require another pull. A mismatch names the dependency inputs that
+changed; pull a compatible tag, or publish a new image if none matches.
+
+The upstream Isaac ROS CLI base layers are selected by the pinned
+`release-4.6` CLI/configuration used for image publication. Existing images do
+not carry copies of those upstream Dockerfiles or a machine-readable base
+contract. A CLI release/base configuration change therefore requires pulling
+a newly published image; the offline check cannot detect it. The byte check
+covers the Thornbots Docker inputs and package manifests only.
+
+Both `--check` and build run without network access or automatic image pulls.
+The build uses only `/opt/ros/jazzy` as its underlay, explicitly selects all
+seven robot packages, caps compilation at two colcon workers with
+`MAKEFLAGS=-j2`, selects the image CUDA compiler and Orin `sm_87` architecture
+explicitly, and never installs dependencies. It uses an isolated,
+task-owned container, removed on exit, through `agent_container.sh`. On
+build-only CI hosts without a GPU, set `ISAAC_AGENT_GPU=none`; robots retain
+the default GPU runtime injection. Host
+`build/`, `install/`, `log/` persist at the canonical
+`/workspaces/isaac_ros-dev` paths inside the container, so symlink installs
+remain valid in startup's workspace mount. Do not relocate the workspace or
+reuse its artifacts from another checkout. Changing the pinned image clears
+these artifacts before rebuilding.
+
+Stop `thornbots` before rebuilding (`sudo systemctl stop thornbots`); the helper
+refuses to modify artifacts mounted by an active `thornbots-runtime` container.
+Before any rebuild attempt that passes this runtime guard, `.robot-overlay-image` is removed. Only a successful
+build that resolves all seven packages to the overlay's install prefixes
+atomically writes the image ID to `.robot-overlay-image`. Startup must require
+this marker to match `.robot-image`, source only `/opt/ros/jazzy/setup.bash`
+then `install/local_setup.bash`, and verify those seven prefixes. To use the
+baked fallback, startup must explicitly select baseline mode. Failed builds
+leave their artifacts for diagnosis but never mark them ready. The additional
+`.robot-overlay-build-image` file tracks the build cache's underlay; it is not
+a startup readiness marker. Concurrent builds are refused by
+`.robot-overlay.lock`; remove a stale lock only after confirming no build runs.
+
+### Emergency local image build and shipping
+
+Local image builds and shipping are emergency fallbacks when a compatible
+registry image is unavailable. Prefer registry pulls and offline overlays for
+routine robot updates. The following legacy build helpers remain available.
+
+To build on a robot, use wall power and run
 `src/isaac_ros_common/scripts/build_robot_image.sh` on it with no host
 arguments (29 min on `ts-nano-dev` with the `isaac_ros` and `realsense`
 layers cached; ROADMAP T29 is cutting that). The first run installs the CLI,

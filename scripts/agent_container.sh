@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # agent_container.sh -- one throwaway Isaac ROS container per agent task.
 #
-#   agent_container.sh up    <task> [-w SRC] [-e EVIDENCE] [-c CPUS] [-m MEM] [-i IMAGE] [-d DOMAIN]
+#   agent_container.sh up    <task> [-w SRC] [-e EVIDENCE] [-c CPUS] [-m MEM] [-i IMAGE] [-d DOMAIN] [-p ARTIFACT_ROOT] [-n] [-z] [-r]
 #   agent_container.sh run   <task> [same options] -- <cmd...>   # up, run, down (trap)
 #   agent_container.sh down  <task>
 #   agent_container.sh env   <task>      # export lines for dexec.sh/smoke.sh
@@ -21,6 +21,11 @@
 #     agent), optional EVIDENCE at /evidence, and per-task build/install/log
 #     volumes. Nothing else from the host.
 #   - -c/-m (or ISAAC_AGENT_CPUS/ISAAC_AGENT_MEM) cap CPU and memory.
+# ISAAC_AGENT_GPU=none skips NVIDIA runtime injection for build-only CI hosts.
+# -p persists build/install/log in ARTIFACT_ROOT at canonical workspace paths;
+# -n disables networking, -z executes without shell/ROS setup, --pull never.
+# -r mounts source read-only, including a shared robot checkout for checks.
+# Persistent mode permits the robot shared workspace; callers serialize builds.
 # Never touches an unlabelled container, notably isaac_ros_jazzy_container.
 # On macOS (the mini) `up` starts Colima if needed and `down`/`clean` stop it
 # when no container is left running. bash 3.2 compatible.
@@ -45,6 +50,7 @@ fi
 
 HELD=0
 RUN_MODE=0
+CLEAN_EXEC=0
 RETAIN_OWNED=0
 INVOCATION=""
 OWN_CONTAINER=""
@@ -159,20 +165,26 @@ cleanup_invocation() {
 cmd_up() {
     local task="${1:-}"; valid_task "$task" || die "task must match [a-z0-9][a-z0-9-]{0,39}"
     shift
-    local src="" ev="" cpus="${ISAAC_AGENT_CPUS:-}" mem="${ISAAC_AGENT_MEM:-}" image="" dom="" opt
+    local src="" ev="" cpus="${ISAAC_AGENT_CPUS:-}" mem="${ISAAC_AGENT_MEM:-}" image="" dom="" artifacts="" network=bridge source_mode=rw opt
     OPTIND=1
-    while getopts "w:e:c:m:i:d:" opt; do
+    while getopts "w:e:c:m:i:d:p:nzr" opt; do
         case "$opt" in
             w) src="$OPTARG" ;; e) ev="$OPTARG" ;; c) cpus="$OPTARG" ;; m) mem="$OPTARG" ;;
-            i) image="$OPTARG" ;; d) dom="$OPTARG" ;; *) die "bad option" ;;
+            i) image="$OPTARG" ;; d) dom="$OPTARG" ;;
+            p) artifacts="$OPTARG" ;; n) network=none ;; z) CLEAN_EXEC=1 ;; r) source_mode=ro ;; *) die "bad option" ;;
         esac
     done
     src="$(cd "${src:-$SELF/../..}" && pwd -P)" || die "source dir missing"
     [ -d "$src/isaac_ros_common" ] || die "$src is not a workspace src/ checkout"
     local shared="${ISAAC_ROS_WS:-$HOME/workspaces/isaac_ros-jazzy}/src"
-    [ -d "$shared" ] && [ "$src" = "$(cd "$shared" && pwd -P)" ] \
+    [ "$source_mode" != ro ] && [ -z "$artifacts" ] && [ -d "$shared" ] && [ "$src" = "$(cd "$shared" && pwd -P)" ] \
         && die "refusing the user's shared workspace $shared: use your own worktree (-w)"
     if [ -n "$ev" ]; then mkdir -p "$ev"; ev="$(cd "$ev" && pwd -P)"; fi
+    if [ -n "$artifacts" ]; then
+        mkdir -p "$artifacts" || die "cannot create artifact root"
+        artifacts="$(cd "$artifacts" && pwd -P)"
+        for opt in build install log; do mkdir -p "$artifacts/$opt" || die "cannot create artifacts"; done
+    fi
     image="$(pick_image "$image")"
 
     local c; c="$(cname "$task")"
@@ -186,8 +198,12 @@ cmd_up() {
     # Same checkout under two agents would share build state and edits.
     local other
     other="$(docker ps -aq --filter "label=$LABEL" | while read -r x; do
-        [ "$(label_of "$x" thornbots.src)" = "$src" ] && echo "$x"; done | head -1)"
-    [ -z "$other" ] || { unlock; die "$src is already mounted by an agent container ($other)"; }
+        [ "$(label_of "$x" thornbots.src)" = "$src" ] && echo "$x"
+        if [ -n "$artifacts" ]; then
+            [ "$(label_of "$x" thornbots.artifacts)" = "$artifacts" ] && echo "$x"
+        fi
+        done | head -1)"
+    [ -z "$other" ] || { unlock; die "$src or its artifact root is already mounted by an agent container ($other)"; }
 
     local part used d start
     used="$(taken domain)"
@@ -215,29 +231,36 @@ cmd_up() {
     token_dir="$(mktemp -d /tmp/thornbots-invocation.XXXXXXXXXX)" || die "cannot allocate invocation ID"
     INVOCATION="${token_dir##*/}"; rmdir "$token_dir"
     for v in build install log; do
+        [ -z "$artifacts" ] || continue
         OWN_VOLUMES+=("$c-$v")
         docker volume create --label "$LABEL=$task" --label "thornbots.created=$now" \
             --label "thornbots.invocation=$INVOCATION" "$c-$v" >/dev/null || die "volume create failed"
         [ "$(docker volume inspect -f '{{index .Labels "thornbots.invocation"}}' "$c-$v")" = "$INVOCATION" ] \
             || die "volume $c-$v is not owned by this invocation"
     done
-    local args=(run -d --init --name "$c" --shm-size=2g
+    local args=(run --pull never --network "$network" -d --init --name "$c" --shm-size=2g
         --label "$LABEL=$task" --label "thornbots.invocation=$INVOCATION" --label "thornbots.domain=$dom" --label "thornbots.partition=$part"
-        --label "thornbots.src=$src" --label "thornbots.created=$now"
+        --label "thornbots.src=$src" --label "thornbots.artifacts=$artifacts" --label "thornbots.created=$now"
         -e "ROS_DOMAIN_ID=$dom" -e "GZ_PARTITION=$part"
         -e "THORNBOTS_ROS_DOMAIN_ID=$dom" -e "THORNBOTS_GZ_PARTITION=$part"
-        -v "$src:/workspaces/isaac_ros-dev/src"
-        -v "$c-build:/workspaces/isaac_ros-dev/build"
-        -v "$c-install:/workspaces/isaac_ros-dev/install"
-        -v "$c-log:/workspaces/isaac_ros-dev/log")
+        -v "$src:/workspaces/isaac_ros-dev/src:$source_mode")
+    for v in build install log; do
+        if [ -n "$artifacts" ]; then
+            args+=(-v "$artifacts/$v:/workspaces/isaac_ros-dev/$v")
+        else
+            args+=(-v "$c-$v:/workspaces/isaac_ros-dev/$v")
+        fi
+    done
     [ -z "$ev" ] || args+=(-v "$ev:/evidence")
     [ -z "$cpus" ] || args+=(--cpus "$cpus")
     [ -z "$mem" ] || args+=(--memory "$mem")
     if [ "$OS" != Darwin ]; then
         args+=(-e HOST_USER_UID="$(id -u)" -e HOST_USER_GID="$(id -g)"
-            -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all --gpus all
             -v /etc/localtime:/etc/localtime:ro
             --entrypoint /usr/local/bin/scripts/workspace-entrypoint.sh)
+        if [ "${ISAAC_AGENT_GPU:-all}" != none ]; then
+            args+=(-e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all --gpus all)
+        fi
     fi
     args+=("$image" sleep infinity)
     OWN_CONTAINER="$c"
@@ -285,7 +308,19 @@ cmd_run() {
     [ "$#" -gt 0 ] || die "run: no command"
     cmd_up "$task" ${opts[@]+"${opts[@]}"} || exit 1
     # Bash defers traps during a foreground external command; wait is interruptible.
-    ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@" <&0 &
+    if [ "$CLEAN_EXEC" -eq 1 ]; then
+        local exec_user=admin exec_home=/home/admin exec_domain exec_partition
+        exec_domain="$(label_of "$OWN_CONTAINER" thornbots.domain)"
+        exec_partition="$(label_of "$OWN_CONTAINER" thornbots.partition)"
+        if [ "$OS" = Darwin ]; then exec_user=root; exec_home=/root; fi
+        docker exec -i -u "$exec_user" --workdir /workspaces/isaac_ros-dev "$OWN_CONTAINER" \
+            env -i HOME="$exec_home" PATH=/usr/local/bin:/usr/bin:/bin \
+            ROS_DOMAIN_ID="$exec_domain" GZ_PARTITION="$exec_partition" \
+            THORNBOTS_ROS_DOMAIN_ID="$exec_domain" THORNBOTS_GZ_PARTITION="$exec_partition" \
+            bash --noprofile --norc -c 'exec "$@"' bash "$@" <&0 &
+    else
+        ISAAC_ROS_CONTAINER="$OWN_CONTAINER" "$DEXEC" -- "$@" <&0 &
+    fi
     RUN_PID=$!
     local rc
     wait "$RUN_PID"; rc=$?
