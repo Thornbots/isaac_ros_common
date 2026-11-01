@@ -6,7 +6,9 @@ packages. Read [Docker design/setup](docker/README.md),
 [Mac setup](macos/README.md), and the
 [Docker skill](../.claude/skills/isaac-ros-docker/SKILL.md) for host operations.
 Agents make and remove their own containers with `scripts/agent_container.sh`; the
-user runs `isaac-ros activate` and image builds.
+user runs `isaac-ros activate`. Robot updates default to registry pulls and
+offline overlays; local image builds/shipping are emergency fallbacks, not the
+default (see Docker README).
 
 ## Scope
 

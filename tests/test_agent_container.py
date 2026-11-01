@@ -77,7 +77,7 @@ docker() {
 
 
 class AgentContainerTest(unittest.TestCase):
-    def exercise(self, mode, command='run', existing=False, orphan=False, input_text=None):
+    def exercise(self, mode, command='run', existing=False, orphan=False, input_text=None, persistent=False, gpu="all", platform="Linux"):
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp)
             workspace = state / 'workspace'
@@ -100,14 +100,42 @@ class AgentContainerTest(unittest.TestCase):
             if existing or orphan:
                 (state / 'isaac-agent-fixture-build').write_text('old-invocation\n')
             invocation = f'cmd_{command} fixture -w {shlex.quote(str(workspace))} -i fake'
+            if persistent:
+                invocation += f' -p {shlex.quote(str(state / "artifacts"))} -n -z'
             if command == 'run':
                 invocation += ' -- true'
             result = subprocess.run(
-                ['/bin/bash', '-c', SOURCE + MOCKS + invocation],
-                env=dict(os.environ, STATE=tmp, MODE=mode, WORKSPACE=str(workspace)),
+                ['/bin/bash', '-c', SOURCE + MOCKS + f'OS={platform}\n' + invocation],
+                env=dict(os.environ, STATE=tmp, MODE=mode, WORKSPACE=str(workspace), ISAAC_AGENT_GPU=gpu),
                 input=input_text, capture_output=True, text=True, timeout=10)
             files = {p.name: p.read_text() for p in state.iterdir() if p.is_file()}
             return result, files
+
+    def test_mac_clean_execution_uses_root_home_and_user(self):
+        result, files = self.exercise('normal', persistent=True, platform='Darwin')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('exec -i -u root --workdir', files['calls'])
+        self.assertIn('env -i HOME=/root', files['calls'])
+
+    def test_build_only_ci_can_disable_gpu_without_changing_robot_default(self):
+        for gpu in ['all', 'none']:
+            result, files = self.exercise('normal', gpu=gpu)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual('--gpus all' in files['calls'], gpu == 'all')
+            self.assertEqual('NVIDIA_VISIBLE_DEVICES' in files['calls'], gpu == 'all')
+
+    def test_persistent_offline_clean_execution_keeps_host_artifacts(self):
+        result, files = self.exercise('normal', persistent=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = files['calls']
+        self.assertIn('run --pull never --network none', calls)
+        self.assertIn('/artifacts/build:/workspaces/isaac_ros-dev/build', calls)
+        self.assertIn('/artifacts/install:/workspaces/isaac_ros-dev/install', calls)
+        self.assertIn('/artifacts/log:/workspaces/isaac_ros-dev/log', calls)
+        self.assertIn('env -i HOME=/home/admin', calls)
+        self.assertNotIn('volume create', calls)
+        self.assertNotIn('volume rm', calls)
+        self.assertIn('rm -f -v owned-id', calls)
 
     def test_duplicate_failure_and_signal_preserve_existing_resources(self):
         for mode in ['duplicate', 'duplicate-signal']:
