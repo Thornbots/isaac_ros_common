@@ -18,12 +18,8 @@ owning package and apt dependencies in `package.xml`, not a Docker layer.
 
 ## Open
 
-- Before a host's first Jazzy run, check shell initialization for stale Humble
-  setup; the CLI mounts host `.bashrc` and `.profile` into the container.
-- Stock `.isaac_ros_dev-dockerargs` mounts host config and credential directories.
-  Decide whether robots should replace it with an empty file; this does not
-  authorize reading credentials.
-- Container rplidar hotplug/udev acceptance remains in
-  the [ROADMAP](../docs/ROADMAP.md#later-needs-a-robot).
-- Robot build speed: [ROADMAP T29](../docs/ROADMAP.md#short-todos).
-- Native Mac GUI rendering remains unverified.
+Software commitments: [ROADMAP](../docs/ROADMAP.md#additional-mini-work).
+Physical validation: [ROBOT_TESTS](../docs/ROBOT_TESTS.md#robot-acceptance).
+
+Before a host’s first Jazzy run, check shell initialization for stale Humble setup; the CLI mounts
+host `.bashrc` and `.profile`. Mount-policy decisions never authorize credential reads.
