@@ -136,7 +136,7 @@ routine robot updates. The following legacy build helpers remain available.
 To build on a robot, use wall power and run
 `src/isaac_ros_common/scripts/build_robot_image.sh` on it with no host
 arguments (29 min on `ts-nano-dev` with the `isaac_ros` and `realsense`
-layers cached; ROADMAP T29 is cutting that). The first run installs the CLI,
+layers cached; see [T29 hardware acceptance](../../docs/ROBOT_TESTS.md#robot-image-workflow)). The first run installs the CLI,
 which needs `uv`; the robots don't ship it
 (`curl -LsSf https://astral.sh/uv/install.sh | sh`, `~/.local/bin` on
 `PATH`). A power cut loses only the step it lands in: BuildKit keeps every
