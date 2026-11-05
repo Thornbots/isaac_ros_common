@@ -129,9 +129,8 @@ a startup readiness marker. Concurrent builds are refused by
 
 ### Emergency local image build and shipping
 
-Local image builds and shipping are emergency fallbacks when a compatible
-registry image is unavailable. Prefer registry pulls and offline overlays for
-routine robot updates. The following legacy build helpers remain available.
+Use these only when no compatible registry image exists; routine robot
+updates use registry pulls and offline overlays.
 
 To build on a robot, use wall power and run
 `src/isaac_ros_common/scripts/build_robot_image.sh` on it with no host
@@ -233,8 +232,8 @@ seven. The packages move together anyway, and one invocation lets colcon order
 and parallelise them. When iterating on one package, `colcon build` inside the
 running container instead.
 
-The Humble image sat at 127 of overlay2's ~128 layers on aarch64, 25 of them
-from this file. On x86_64 (2026-09-26) the Jazzy image is 42: `isaac_ros` 25,
+overlay2 allows ~128 layers (the Humble image hit 127). On x86_64
+(2026-09-26) the Jazzy image is 42: `isaac_ros` 25,
 `realsense` 9, this file 8 (the seven `RUN`/`COPY` steps behind the four
 rows above, plus a 4 kB `WORKDIR`). Check headroom with
 `docker inspect <image> --format '{{len .RootFS.Layers}}'`.
@@ -255,9 +254,6 @@ pull the stock debs over the custom ones. The same exclusion applies to
 `librealsense2`, now declared as a build dependency by the ROI package.
 `--ignore-src` covers the
 inter-package deps, which resolve because all seven manifests are present.
-
-The Humble image pinned `ros-humble-diagnostic-updater >= 4.0.7` because 4.0.6
-shipped no `libdiagnostic_updater.so`. Jazzy ships 4.2.x, so the pin is gone.
 
 ## Container user, udev, environment
 
