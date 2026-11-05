@@ -8,7 +8,7 @@ packages. Read [Docker design/setup](docker/README.md),
 Agents make and remove their own containers with `scripts/agent_container.sh`; the
 user runs `isaac-ros activate`. Robot updates default to registry pulls and
 offline overlays; local image builds/shipping are emergency fallbacks, not the
-default ([registry pull and overlay](docker/README.md#building-the-robots-image)).
+default (see Docker README).
 
 ## Scope
 

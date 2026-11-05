@@ -17,13 +17,14 @@ This fork adds the Thornbots image and host setup on top of NVIDIA
 
 ### Agent container ownership
 
-`agent_container.sh` labels every container and volume it creates with a
-random invocation ID. Exit/signal cleanup checks that ID and removes the
+`agent_container.sh` labels every created container and volume with a random
+invocation ID. Automatic exit/signal cleanup checks that ID and removes the
 container by its immutable Docker ID; a reused task name never proves
-ownership. Failed `up` cleans what it created, successful `up` leaves it for
-explicit `down`, and `run` cleans on exit. Existing task containers and
-build/install/log volumes are refused without reuse or removal. Use `down` or
-stale-resource `clean` only for resources you own. Host commands are in the
+ownership. Failed `up` also cleans resources created before the failure.
+Successful `up` leaves them for explicit `down`; `run` cleans them on exit.
+Existing task containers and build/install/log volumes are refused without
+reuse or removal. Use explicit `down` or stale-resource `clean` only for
+resources you own. Host operation commands live in the
 [Docker skill](../.claude/skills/isaac-ros-docker/SKILL.md#your-own-container).
 
 ### Safe launch stopping
