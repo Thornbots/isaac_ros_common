@@ -334,7 +334,8 @@ colima forwards the VM's docker socket to the Mac over one unsupervised ssh
 connection; when it drops, `docker` on the Mac just stops answering. The
 keepalive replaces it with supervised ssh loops in a tmux session, and also
 shares Foxglove (port 8765, which `sim.launch.py` and every test launch
-serve) on the Mac's tailscale IP:
+serve when started with `foxglove:=true`; it is off by default) on the Mac's
+tailscale IP:
 
 ```sh
 isaac_ros_common/scripts/mac-keepalive.sh   # (re)creates tmux session keepalive

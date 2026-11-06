@@ -78,7 +78,7 @@ docker() {
 
 
 class AgentContainerTest(unittest.TestCase):
-    def exercise(self, mode, command='run', existing=False, orphan=False, input_text=None, persistent=False, gpu="all", platform="Linux"):
+    def exercise(self, mode, command='run', existing=False, orphan=False, input_text=None, persistent=False, gpu="all", platform="Linux", flags=""):
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp)
             workspace = state / 'workspace'
@@ -101,6 +101,7 @@ class AgentContainerTest(unittest.TestCase):
             if existing or orphan:
                 (state / 'isaac-agent-fixture-build').write_text('old-invocation\n')
             invocation = f'cmd_{command} fixture -w {shlex.quote(str(workspace))} -i fake'
+            invocation += flags
             if persistent:
                 invocation += f' -p {shlex.quote(str(state / "artifacts"))} -n -z'
             if command == 'run':
@@ -117,6 +118,23 @@ class AgentContainerTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('exec -i -u root --workdir', files['calls'])
         self.assertIn('env -i HOME=/root', files['calls'])
+
+    def test_dds_and_foxglove_default_off_and_flags_turn_them_on(self):
+        result, files = self.exercise('normal')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('-e THORNBOTS_REMOTE_DDS=false -e THORNBOTS_FOXGLOVE=false', files['calls'])
+        result, files = self.exercise('normal', flags=' -F')
+        self.assertIn('-e THORNBOTS_REMOTE_DDS=false -e THORNBOTS_FOXGLOVE=true', files['calls'])
+        result, files = self.exercise('normal', flags=' -T')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('-T is only supported on Colima', result.stderr)
+
+    def test_dexec_applies_the_remote_dds_switch_to_agent_containers_only(self):
+        source = (SCRIPT.parent / 'dexec.sh').read_text()
+        self.assertIn('${THORNBOTS_REMOTE_DDS:-false}', source)
+        self.assertIn('unset FASTRTPS_DEFAULT_PROFILES_FILE; export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST', source)
+        gate = '[ -z \\"\\${THORNBOTS_ROS_DOMAIN_ID:-}\\" ] || case'
+        self.assertIn(gate, source)
 
     def test_build_only_ci_can_disable_gpu_without_changing_robot_default(self):
         for gpu in ['all', 'none']:
