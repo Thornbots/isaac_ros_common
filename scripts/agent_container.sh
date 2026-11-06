@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # agent_container.sh -- one throwaway Isaac ROS container per agent task.
 #
-#   agent_container.sh up    <task> [-w SRC] [-e EVIDENCE] [-c CPUS] [-m MEM] [-i IMAGE] [-d DOMAIN] [-p ARTIFACT_ROOT] [-n] [-z] [-r] [-T]
+#   agent_container.sh up    <task> [-w SRC] [-e EVIDENCE] [-c CPUS] [-m MEM] [-i IMAGE] [-d DOMAIN] [-p ARTIFACT_ROOT] [-n] [-z] [-r] [-T] [-F]
 #   agent_container.sh run   <task> [same options] -- <cmd...>   # up, run, down (trap)
 #   agent_container.sh down  <task>
 #   agent_container.sh env   <task>      # export lines for dexec.sh/smoke.sh
@@ -16,8 +16,16 @@
 #     sim's MCB PTY link derives from both (/tmp/mcb_emulator_pty-<part>-<dom>).
 #   - bridge network, private IPC, no published ports, not privileged: the
 #     user's host-network container and other agents cannot see its sockets.
-#   - On Colima, forwarded bridge traffic to 100.64.0.0/10 is dropped.
-#     -T opts this task out for cross-machine DDS using a dedicated bridge.
+#   - DDS stays on the machine. The container env has THORNBOTS_REMOTE_DDS=false
+#     and THORNBOTS_FOXGLOVE=false; dexec.sh then gives shells
+#     ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST and no peers profile, and launches
+#     start no Foxglove bridge. -T turns remote DDS on (cable profile with the
+#     robots' Tailscale peers) and -F Foxglove, for tasks that test them.
+#   - On Colima that is also enforced in the VM: forwarded bridge traffic to
+#     100.64.0.0/10 (Tailscale) is dropped by a THORNBOTS-AGENT chain that a
+#     systemd unit re-creates after every Docker start, so it survives
+#     `colima stop/start`. -T lifts it for this task only, on a dedicated
+#     bridge. The user's host-network container never crosses that chain.
 #   - mounts: SRC at .../isaac_ros-dev/src (default: the checkout holding this
 #     script; refused if it is $ISAAC_ROS_WS/src or already mounted by another
 #     agent), optional EVIDENCE at /evidence, and per-task build/install/log
@@ -209,13 +217,13 @@ cleanup_invocation() {
 cmd_up() {
     local task="${1:-}"; valid_task "$task" || die "task must match [a-z0-9][a-z0-9-]{0,39}"
     shift
-    local src="" ev="" cpus="${ISAAC_AGENT_CPUS:-}" mem="${ISAAC_AGENT_MEM:-}" image="" dom="" artifacts="" network=bridge source_mode=rw allow_dds=0 opt
+    local src="" ev="" cpus="${ISAAC_AGENT_CPUS:-}" mem="${ISAAC_AGENT_MEM:-}" image="" dom="" artifacts="" network=bridge source_mode=rw allow_dds=0 foxglove=false opt
     OPTIND=1
-    while getopts "w:e:c:m:i:d:p:nzrT" opt; do
+    while getopts "w:e:c:m:i:d:p:nzrTF" opt; do
         case "$opt" in
             w) src="$OPTARG" ;; e) ev="$OPTARG" ;; c) cpus="$OPTARG" ;; m) mem="$OPTARG" ;;
             i) image="$OPTARG" ;; d) dom="$OPTARG" ;;
-            p) artifacts="$OPTARG" ;; n) network=none ;; z) CLEAN_EXEC=1 ;; r) source_mode=ro ;; T) allow_dds=1 ;; *) die "bad option" ;;
+            p) artifacts="$OPTARG" ;; n) network=none ;; z) CLEAN_EXEC=1 ;; r) source_mode=ro ;; T) allow_dds=1 ;; F) foxglove=true ;; *) die "bad option" ;;
         esac
     done
     src="$(cd "${src:-$SELF/../..}" && pwd -P)" || die "source dir missing"
@@ -300,6 +308,8 @@ cmd_up() {
         --label "thornbots.src=$src" --label "thornbots.artifacts=$artifacts" --label "thornbots.created=$now"
         -e "ROS_DOMAIN_ID=$dom" -e "GZ_PARTITION=$part"
         -e "THORNBOTS_ROS_DOMAIN_ID=$dom" -e "THORNBOTS_GZ_PARTITION=$part"
+        -e "THORNBOTS_REMOTE_DDS=$([ "$allow_dds" -eq 1 ] && echo true || echo false)"
+        -e "THORNBOTS_FOXGLOVE=$foxglove"
         -v "$src:/workspaces/isaac_ros-dev/src:$source_mode")
     for v in build install log; do
         if [ -n "$artifacts" ]; then

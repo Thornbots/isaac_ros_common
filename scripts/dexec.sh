@@ -115,7 +115,10 @@ CMD="$(printf '%q ' "$@")"
 # first colcon build, and the Mac image has no ros2_ws.
 # /etc/bash.bashrc hardcodes ROS_DOMAIN_ID=1, so an agent container
 # (agent_container.sh) re-asserts its own domain and gz partition afterwards.
-SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && { [ ! -f /workspaces/ros2_ws/install/setup.bash ] || source /workspaces/ros2_ws/install/setup.bash ; } && { [ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash ; } ; [ -z \"\${THORNBOTS_ROS_DOMAIN_ID:-}\" ] || export ROS_DOMAIN_ID=\$THORNBOTS_ROS_DOMAIN_ID GZ_PARTITION=\$THORNBOTS_GZ_PARTITION ; } >/dev/null"
+# It also applies THORNBOTS_REMOTE_DDS (container env, default false) here, so
+# images built before the bashrc learned the switch behave the same: off means
+# no profile with Tailscale peers and ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST.
+SOURCE_ENV="{ export PS1='\$ ' && source /etc/bash.bashrc && { [ ! -f /workspaces/ros2_ws/install/setup.bash ] || source /workspaces/ros2_ws/install/setup.bash ; } && { [ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash ; } ; [ -z \"\${THORNBOTS_ROS_DOMAIN_ID:-}\" ] || export ROS_DOMAIN_ID=\$THORNBOTS_ROS_DOMAIN_ID GZ_PARTITION=\$THORNBOTS_GZ_PARTITION ; [ -z \"\${THORNBOTS_ROS_DOMAIN_ID:-}\" ] || case \"\${THORNBOTS_REMOTE_DDS:-false}\" in 1|true|TRUE|True) ;; *) unset FASTRTPS_DEFAULT_PROFILES_FILE; export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST ;; esac ; } >/dev/null"
 
 if [ "$DETACH" -eq 1 ]; then
     # $$ is the HOST shell's pid, expanded here before the string is sent

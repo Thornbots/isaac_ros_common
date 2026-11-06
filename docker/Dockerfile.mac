@@ -31,7 +31,7 @@ RUN source /opt/ros/jazzy/setup.bash && \
 
 COPY isaac_ros_common/docker/fastdds_cable.xml /etc/fastdds/profile.xml
 RUN { echo "export ROS_DOMAIN_ID=1"; \
-      echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"; \
+      echo 'case "${THORNBOTS_REMOTE_DDS:-false}" in 1|true|TRUE|True) export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml ;; *) unset FASTRTPS_DEFAULT_PROFILES_FILE; export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST ;; esac'; \
       echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"; \
       echo "source /opt/ros/jazzy/setup.bash"; \
       echo "[ ! -f /workspaces/isaac_ros-dev/install/setup.bash ] || source /workspaces/isaac_ros-dev/install/setup.bash"; \
