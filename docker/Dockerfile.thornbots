@@ -83,7 +83,7 @@ RUN cd ${ROS_WS} && \
 #
 # RealSense 60 fps profiles over the stock ones, the DDS profile, the
 # rplidar udev rule, and `dialout` for the container user (serial devices).
-# ROS_DOMAIN_ID is 1 until the Jazzy cutover (JAZZY_FLASH.md).
+# ROS_DOMAIN_ID is 1 until every machine moves to 0 (docs/ROADMAP.md T38).
 ##############################################################################
 COPY isaac_ros_common/docker /opt/thornbots/docker
 ARG ROS_DOMAIN_ID=1
@@ -97,7 +97,7 @@ RUN D=/opt/thornbots/docker && \
     install -D -m 755 ${D}/scripts/entrypoint_additions/50-dialout.sh \
         /usr/local/bin/scripts/entrypoint_additions/50-dialout.sh && \
     { echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}"; \
-      echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"; \
+      echo 'case "${THORNBOTS_REMOTE_DDS:-false}" in 1|true|TRUE|True) export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml ;; *) unset FASTRTPS_DEFAULT_PROFILES_FILE; export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST ;; esac'; \
       echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"; \
       echo "source ${ROS_SETUP}"; \
       echo "source ${ROS_WS}/install/setup.bash"; } >> /etc/bash.bashrc

@@ -33,7 +33,7 @@ ninja = "*"
 pkg-config = "*"
 eigen = "*"
 numpy = "<2"
-pytest = "<8"
+pytest = ">=9.0.3"
 setuptools = "<80"
 
 [activation.env]
