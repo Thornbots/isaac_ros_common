@@ -15,6 +15,7 @@ DEXEC="$STATE/dexec"
 lock() { HELD=1; }
 unlock() { HELD=0; }
 colima_up() { :; }
+colima_guard() { echo guard >> "$STATE/calls"; }
 colima_stop_if_idle() { echo idle >> "$STATE/calls"; }
 sleep() { :; }
 docker() {
