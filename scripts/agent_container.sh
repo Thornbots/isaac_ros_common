@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # agent_container.sh -- one throwaway Isaac ROS container per agent task.
 #
-#   agent_container.sh up    <task> [-w SRC] [-e EVIDENCE] [-c CPUS] [-m MEM] [-i IMAGE] [-d DOMAIN] [-p ARTIFACT_ROOT] [-n] [-z] [-r]
+#   agent_container.sh up    <task> [-w SRC] [-e EVIDENCE] [-c CPUS] [-m MEM] [-i IMAGE] [-d DOMAIN] [-p ARTIFACT_ROOT] [-n] [-z] [-r] [-T]
 #   agent_container.sh run   <task> [same options] -- <cmd...>   # up, run, down (trap)
 #   agent_container.sh down  <task>
 #   agent_container.sh env   <task>      # export lines for dexec.sh/smoke.sh
@@ -16,6 +16,8 @@
 #     sim's MCB PTY link derives from both (/tmp/mcb_emulator_pty-<part>-<dom>).
 #   - bridge network, private IPC, no published ports, not privileged: the
 #     user's host-network container and other agents cannot see its sockets.
+#   - On Colima, forwarded bridge traffic to 100.64.0.0/10 is dropped.
+#     -T opts this task out for cross-machine DDS using a dedicated bridge.
 #   - mounts: SRC at .../isaac_ros-dev/src (default: the checkout holding this
 #     script; refused if it is $ISAAC_ROS_WS/src or already mounted by another
 #     agent), optional EVIDENCE at /evidence, and per-task build/install/log
@@ -56,6 +58,7 @@ INVOCATION=""
 OWN_CONTAINER=""
 OWN_VOLUMES=()
 OWN_COLIMA=0
+OWN_NETWORK=""
 RUN_PID=""
 lock() {
     local i=0 pid
@@ -76,6 +79,41 @@ colima_up() {
     [ -z "${DOCKER_HOST:-}" ] && [ -S "$HOME/.colima/default/docker.sock" ] \
         && export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
     return 0
+}
+
+# Install in the VM, not its ephemeral iptables state. Docker start/restart
+# runs the unit after Docker recreates DOCKER-USER; Colima boots Docker normally.
+colima_guard() {
+    [ "$OS" = Darwin ] || return 0
+    colima ssh -- sudo sh -s <<'GUARD' || die "cannot install Colima DDS egress guard"
+set -eu
+cat >/usr/local/sbin/thornbots-agent-guard <<'SCRIPT'
+#!/bin/sh
+set -eu
+iptables -w -N THORNBOTS-AGENT 2>/dev/null || true
+iptables -w -C THORNBOTS-AGENT -d 100.64.0.0/10 -j DROP 2>/dev/null || \
+    iptables -w -A THORNBOTS-AGENT -d 100.64.0.0/10 -j DROP
+for iface in docker0 br+; do
+    iptables -w -C DOCKER-USER -i "$iface" -j THORNBOTS-AGENT 2>/dev/null || \
+        iptables -w -I DOCKER-USER 1 -i "$iface" -j THORNBOTS-AGENT
+done
+SCRIPT
+chmod 755 /usr/local/sbin/thornbots-agent-guard
+cat >/etc/systemd/system/thornbots-agent-guard.service <<'UNIT'
+[Unit]
+Description=Block bridged agent traffic to Tailscale CGNAT
+After=docker.service
+PartOf=docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/thornbots-agent-guard
+[Install]
+WantedBy=docker.service
+UNIT
+systemctl daemon-reload
+systemctl enable thornbots-agent-guard.service >/dev/null
+systemctl start thornbots-agent-guard.service
+GUARD
 }
 
 # Caller holds the lock, so a concurrent `up` cannot land between check and stop.
@@ -123,6 +161,9 @@ remove_task() { # task; removes container + volumes, only if labelled for this t
         [ "$(label_of "$c" "$LABEL")" = "$task" ] || die "$c is not a labelled agent container; refusing"
         docker rm -f -v "$c" >/dev/null
     fi
+    if [ "$(docker network inspect -f '{{index .Labels "thornbots.agent"}}' "$c-dds" 2>/dev/null)" = "$task" ]; then
+        docker network rm "$c-dds" >/dev/null || die "cannot remove task DDS network"
+    fi
     for v in build install log; do
         [ "$(docker volume inspect -f "{{index .Labels \"$LABEL\"}}" "$c-$v" 2>/dev/null)" = "$task" ] \
             && docker volume rm -f "$c-$v" >/dev/null
@@ -151,6 +192,9 @@ cleanup_invocation() {
             id="$(docker inspect -f '{{.Id}}' "$OWN_CONTAINER")"
             [ -z "$id" ] || { docker rm -f -v "$id" >/dev/null; removed=1; }
         fi
+        if [ -n "$OWN_NETWORK" ] && [ "$(docker network inspect -f '{{index .Labels "thornbots.invocation"}}' "$OWN_NETWORK" 2>/dev/null)" = "$INVOCATION" ]; then
+            docker network rm "$OWN_NETWORK" >/dev/null || say "could not remove task DDS network"
+        fi
         for v in ${OWN_VOLUMES[@]+"${OWN_VOLUMES[@]}"}; do
             if [ "$(docker volume inspect -f '{{index .Labels "thornbots.invocation"}}' "$v" 2>/dev/null)" = "$INVOCATION" ]; then
                 docker volume rm -f "$v" >/dev/null; removed=1
@@ -165,13 +209,13 @@ cleanup_invocation() {
 cmd_up() {
     local task="${1:-}"; valid_task "$task" || die "task must match [a-z0-9][a-z0-9-]{0,39}"
     shift
-    local src="" ev="" cpus="${ISAAC_AGENT_CPUS:-}" mem="${ISAAC_AGENT_MEM:-}" image="" dom="" artifacts="" network=bridge source_mode=rw opt
+    local src="" ev="" cpus="${ISAAC_AGENT_CPUS:-}" mem="${ISAAC_AGENT_MEM:-}" image="" dom="" artifacts="" network=bridge source_mode=rw allow_dds=0 opt
     OPTIND=1
-    while getopts "w:e:c:m:i:d:p:nzr" opt; do
+    while getopts "w:e:c:m:i:d:p:nzrT" opt; do
         case "$opt" in
             w) src="$OPTARG" ;; e) ev="$OPTARG" ;; c) cpus="$OPTARG" ;; m) mem="$OPTARG" ;;
             i) image="$OPTARG" ;; d) dom="$OPTARG" ;;
-            p) artifacts="$OPTARG" ;; n) network=none ;; z) CLEAN_EXEC=1 ;; r) source_mode=ro ;; *) die "bad option" ;;
+            p) artifacts="$OPTARG" ;; n) network=none ;; z) CLEAN_EXEC=1 ;; r) source_mode=ro ;; T) allow_dds=1 ;; *) die "bad option" ;;
         esac
     done
     src="$(cd "${src:-$SELF/../..}" && pwd -P)" || die "source dir missing"
@@ -194,6 +238,9 @@ cmd_up() {
     trap 'exit 143' TERM
     trap 'exit 129' HUP
     colima_up
+    colima_guard
+    [ "$allow_dds" -eq 0 ] || [ "$OS" = Darwin ] || die "-T is only supported on Colima"
+    [ "$allow_dds" -eq 0 ] || [ "$network" = bridge ] || die "-T cannot be combined with -n"
     docker inspect "$c" >/dev/null 2>&1 && { unlock; die "$c already exists (task name in use; 'down $task' if it is yours)"; }
     # Same checkout under two agents would share build state and edits.
     local other
@@ -238,6 +285,16 @@ cmd_up() {
         [ "$(docker volume inspect -f '{{index .Labels "thornbots.invocation"}}' "$c-$v")" = "$INVOCATION" ] \
             || die "volume $c-$v is not owned by this invocation"
     done
+    if [ "$allow_dds" -eq 1 ]; then
+        # A distinct bridge name keeps this exception scoped to the task's network.
+        local bridge_name
+        bridge_name="ta$(printf '%s' "$INVOCATION" | cksum | awk '{print $1}')"
+        OWN_NETWORK="$c-dds"
+        docker network create --driver bridge --opt "com.docker.network.bridge.name=$bridge_name" \
+            --label "$LABEL=$task" --label "thornbots.invocation=$INVOCATION" "$OWN_NETWORK" >/dev/null \
+            || die "cannot create task DDS network"
+        network="$OWN_NETWORK"
+    fi
     local args=(run --pull never --network "$network" -d --init --name "$c" --shm-size=2g
         --label "$LABEL=$task" --label "thornbots.invocation=$INVOCATION" --label "thornbots.domain=$dom" --label "thornbots.partition=$part"
         --label "thornbots.src=$src" --label "thornbots.artifacts=$artifacts" --label "thornbots.created=$now"
