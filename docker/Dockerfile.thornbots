@@ -75,6 +75,7 @@ RUN cd ${ROS_WS} && \
         roi_depth_query \
         rf2o_laser_odometry \
         sentry_localization \
+        thornbots_nav \
         thornbots_pkg \
         realsense_yolov8_nitros_bridge
 

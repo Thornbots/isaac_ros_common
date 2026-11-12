@@ -10,6 +10,7 @@ PACKAGES = {
     'Realsense_ROI_Depth_Rectifier': 'roi_depth_query',
     'rf2o_laser_odometry': 'rf2o_laser_odometry',
     'sentry_localization': 'sentry_localization',
+    'nav_pkg': 'thornbots_nav',
     'thornbots_pkg': 'thornbots_pkg',
     'realsense-yolov8-nitros-bridge': 'realsense_yolov8_nitros_bridge',
 }
