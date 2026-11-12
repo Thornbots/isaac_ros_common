@@ -3,7 +3,7 @@
 The Thornbots top layer over Isaac ROS 4.6 on ROS 2 Jazzy. `isaac-ros-cli`
 builds the chain `isaac_ros` -> `realsense` -> `thornbots`: the first two
 Dockerfiles ship with the CLI, this one is ours. It installs the Isaac ROS apt
-packages we use, builds our seven packages into `/workspaces/ros2_ws`, and
+packages we use, builds our eight packages into `/workspaces/ros2_ws`, and
 drops in the 60 fps RealSense profiles, the DDS profile and the rplidar udev
 rule.
 
@@ -77,7 +77,7 @@ The pinned image retains its CI-tested baked application in
 
 The image supplies Ubuntu/ROS/Isaac ROS, CUDA/TensorRT, the custom RealSense
 build, compilers, all rosdep-resolved dependencies, DDS/camera/udev setup and
-container entry helpers. The overlay owns all seven application packages,
+container entry helpers. The overlay owns all eight application packages,
 including generated messages, binaries, Python modules, launch files and
 package configuration. Build them together so interface changes cannot leave
 a baked consumer using an older message ABI. Model assets, maps and recorded
@@ -87,7 +87,7 @@ ONNX before relying on it; colcon does not rebuild TensorRT engines.
 
 Compatibility compares every non-document file and symlink in the checkout's
 `isaac_ros_common/docker/` (including the Dockerfile, excluding README/Markdown docs) against
-`/opt/thornbots/docker`, plus all seven `package.xml` files against the image's
+`/opt/thornbots/docker`, plus all eight `package.xml` files against the image's
 `/workspaces/ros2_ws/src`. This works with existing published images without
 new labels or Dockerfile changes. Source and helper changes outside `docker/`
 do not require another pull. A mismatch names the dependency inputs that
@@ -102,7 +102,7 @@ covers the Thornbots Docker inputs and package manifests only.
 
 Both `--check` and build run without network access or automatic image pulls.
 The build uses only `/opt/ros/jazzy` as its underlay, explicitly selects all
-seven robot packages, caps compilation at two colcon workers with
+eight robot packages, caps compilation at two colcon workers with
 `MAKEFLAGS=-j2`, selects the image CUDA compiler and Orin `sm_87` architecture
 explicitly, and never installs dependencies. It uses an isolated,
 task-owned container, removed on exit, through `agent_container.sh`. On
@@ -117,10 +117,10 @@ these artifacts before rebuilding.
 Stop `thornbots` before rebuilding (`sudo systemctl stop thornbots`); the helper
 refuses to modify artifacts mounted by an active `thornbots-runtime` container.
 Before any rebuild attempt that passes this runtime guard, `.robot-overlay-image` is removed. Only a successful
-build that resolves all seven packages to the overlay's install prefixes
+build that resolves all eight packages to the overlay's install prefixes
 atomically writes the image ID to `.robot-overlay-image`. Startup must require
 this marker to match `.robot-image`, source only `/opt/ros/jazzy/setup.bash`
-then `install/local_setup.bash`, and verify those seven prefixes. To use the
+then `install/local_setup.bash`, and verify those eight prefixes. To use the
 baked fallback, startup must explicitly select baseline mode. Failed builds
 leave their artifacts for diagnosis but never mark them ready. The additional
 `.robot-overlay-build-image` file tracks the build cache's underlay; it is not
@@ -228,8 +228,8 @@ submodule to the recorded SHA and detaches HEAD; `git submodule update
 top. Layer 3 excludes `isaac_ros_common/` and the top-level `*.md` files, so
 editing a plan doesn't rebuild the packages.
 
-All seven packages share one `colcon build`, so touching one rebuilds all
-seven. The packages move together anyway, and one invocation lets colcon order
+All eight packages share one `colcon build`, so touching one rebuilds all
+eight. The packages move together anyway, and one invocation lets colcon order
 and parallelise them. When iterating on one package, `colcon build` inside the
 running container instead.
 
@@ -254,7 +254,7 @@ the librealsense it built. Letting rosdep resolve those keys from apt could
 pull the stock debs over the custom ones. The same exclusion applies to
 `librealsense2`, now declared as a build dependency by the ROI package.
 `--ignore-src` covers the
-inter-package deps, which resolve because all seven manifests are present.
+inter-package deps, which resolve because all eight manifests are present.
 
 The Humble image pinned `ros-humble-diagnostic-updater >= 4.0.7` because 4.0.6
 shipped no `libdiagnostic_updater.so`. Jazzy ships 4.2.x, so the pin is gone.
@@ -287,6 +287,7 @@ sudo isaac_ros_common/docker/scripts/install-sim.sh
 | `ros2_dji_serial_bridge` | `dji_serial_bridge` |
 | `Realsense_ROI_Depth_Rectifier` | `roi_depth_query` |
 | `realsense-yolov8-nitros-bridge` | `realsense_yolov8_nitros_bridge` |
+| `nav_pkg` | `thornbots_nav` |
 
 The other four (`sllidar_ros2`, `rf2o_laser_odometry`, `sentry_localization`,
 `thornbots_pkg`) match. `rf2o_laser_odometry` is a Thornbots fork: upstream

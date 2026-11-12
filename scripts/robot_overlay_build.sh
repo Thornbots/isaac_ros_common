@@ -8,9 +8,9 @@ export MAKEFLAGS=-j2
 export CUDACXX=/usr/local/cuda/bin/nvcc
 export PATH="/usr/local/cuda/bin:$PATH"
 packages=(sllidar_ros2 dji_serial_bridge roi_depth_query rf2o_laser_odometry
-    sentry_localization thornbots_pkg realsense_yolov8_nitros_bridge)
+    sentry_localization thornbots_nav thornbots_pkg realsense_yolov8_nitros_bridge)
 paths=(src/sllidar_ros2 src/ros2_dji_serial_bridge src/Realsense_ROI_Depth_Rectifier
-    src/rf2o_laser_odometry src/sentry_localization src/thornbots_pkg
+    src/rf2o_laser_odometry src/sentry_localization src/nav_pkg src/thornbots_pkg
     src/realsense-yolov8-nitros-bridge)
 colcon build --parallel-workers 2 --symlink-install --base-paths "${paths[@]}" --packages-select "${packages[@]}" \
     --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_CUDA_ARCHITECTURES=87

@@ -8,7 +8,7 @@ import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/robot_overlay_build.sh'
 PACKAGES = ['sllidar_ros2', 'dji_serial_bridge', 'roi_depth_query',
-            'rf2o_laser_odometry', 'sentry_localization', 'thornbots_pkg',
+            'rf2o_laser_odometry', 'sentry_localization', 'thornbots_nav', 'thornbots_pkg',
             'realsense_yolov8_nitros_bridge']
 
 
@@ -43,7 +43,7 @@ class OverlayBuildTest(unittest.TestCase):
                                              BAD_PREFIX='1' if bad_prefix else '0'))
             return result, calls.read_text().splitlines()
 
-    def test_all_seven_build_and_resolve_only_after_jazzy_and_local_setup(self):
+    def test_all_eight_build_and_resolve_only_after_jazzy_and_local_setup(self):
         result, calls = self.exercise()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls[0], 'jazzy')
