@@ -63,8 +63,9 @@ RUN source ${ROS_SETUP} && \
 ##############################################################################
 # LAYER 3: our packages, one COPY and one colcon build.
 #
-# .dockerignore already drops sim/ and all of isaac_ros_common but docker/.
-# Directory name != package name for three of them, hence the explicit list.
+# .dockerignore already drops sim/, the sim-only robot_localization fork (rosdep
+# installs the apt package) and all of isaac_ros_common but docker/.
+# Directory name != package name for four of them, hence the explicit list.
 ##############################################################################
 COPY --exclude=isaac_ros_common --exclude=*.md --exclude=.dockerignore . ${ROS_WS}/src/
 RUN cd ${ROS_WS} && \
