@@ -63,8 +63,9 @@ RUN source ${ROS_SETUP} && \
 ##############################################################################
 # LAYER 3: our packages, one COPY and one colcon build.
 #
-# .dockerignore already drops sim/ and all of isaac_ros_common but docker/.
-# Directory name != package name for three of them, hence the explicit list.
+# .dockerignore already drops sim/, the sim-only robot_localization fork (rosdep
+# installs the apt package) and all of isaac_ros_common but docker/.
+# Directory name != package name for four of them, hence the explicit list.
 ##############################################################################
 COPY --exclude=isaac_ros_common --exclude=*.md --exclude=.dockerignore . ${ROS_WS}/src/
 RUN cd ${ROS_WS} && \
@@ -75,6 +76,7 @@ RUN cd ${ROS_WS} && \
         roi_depth_query \
         rf2o_laser_odometry \
         sentry_localization \
+        thornbots_nav \
         thornbots_pkg \
         realsense_yolov8_nitros_bridge
 
@@ -83,7 +85,7 @@ RUN cd ${ROS_WS} && \
 #
 # RealSense 60 fps profiles over the stock ones, the DDS profile, the
 # rplidar udev rule, and `dialout` for the container user (serial devices).
-# ROS_DOMAIN_ID is 1 until the Jazzy cutover (JAZZY_FLASH.md).
+# ROS_DOMAIN_ID is 1 until every machine moves to 0 (docs/ROADMAP.md T38).
 ##############################################################################
 COPY isaac_ros_common/docker /opt/thornbots/docker
 ARG ROS_DOMAIN_ID=1
@@ -97,7 +99,7 @@ RUN D=/opt/thornbots/docker && \
     install -D -m 755 ${D}/scripts/entrypoint_additions/50-dialout.sh \
         /usr/local/bin/scripts/entrypoint_additions/50-dialout.sh && \
     { echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}"; \
-      echo "export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml"; \
+      echo 'case "${THORNBOTS_REMOTE_DDS:-false}" in 1|true|TRUE|True) export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/profile.xml ;; *) unset FASTRTPS_DEFAULT_PROFILES_FILE; export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST ;; esac'; \
       echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"; \
       echo "source ${ROS_SETUP}"; \
       echo "source ${ROS_WS}/install/setup.bash"; } >> /etc/bash.bashrc
