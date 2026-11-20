@@ -31,11 +31,12 @@ ENV ROS_SETUP=/opt/ros/jazzy/setup.bash
 ##############################################################################
 # Hold TensorRT at the JetPack 7.2.1 release that ros-jazzy-isaac-ros-tensor-rt
 # requires exactly; the NVIDIA repo also serves 11.x (cuda13.4), which apt
-# would otherwise pick and then fail to resolve.
+# would otherwise pick and then fail to resolve. Above 1001 so it beats base
+# image origin pins, where equal priorities fall back to the newest version.
 RUN printf '%s\n' \
     'Package: tensorrt* libnvinfer* python3-libnvinfer* libnvonnxparsers*' \
     'Pin: version 10.16.2.10-1+cuda13.2' \
-    'Pin-Priority: 1001' > /etc/apt/preferences.d/thornbots-tensorrt
+    'Pin-Priority: 2000' > /etc/apt/preferences.d/thornbots-tensorrt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     build-essential \
